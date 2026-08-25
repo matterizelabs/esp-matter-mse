@@ -245,11 +245,15 @@ extern "C" void app_main()
 
 #ifdef CONFIG_ENABLE_SET_CERT_DECLARATION_API
     auto * dac_provider = get_dac_provider();
+    CHIP_ERROR cd_err = CHIP_NO_ERROR;
 #ifdef CONFIG_SEC_CERT_DAC_PROVIDER
-    static_cast<ESP32SecureCertDACProvider *>(dac_provider)->SetCertificationDeclaration(cdSpan);
+    cd_err = static_cast<ESP32SecureCertDACProvider *>(dac_provider)->SetCertificationDeclaration(cdSpan);
 #elif defined(CONFIG_FACTORY_PARTITION_DAC_PROVIDER)
-    static_cast<ESP32FactoryDataProvider *>(dac_provider)->SetCertificationDeclaration(cdSpan);
+    cd_err = static_cast<ESP32FactoryDataProvider *>(dac_provider)->SetCertificationDeclaration(cdSpan);
 #endif
+    if (cd_err != CHIP_NO_ERROR) {
+        ESP_LOGE(TAG, "Failed to set certification declaration, err:%" CHIP_ERROR_FORMAT, cd_err.Format());
+    }
 #endif // CONFIG_ENABLE_SET_CERT_DECLARATION_API
 
     /* Initialize the animation flash cache */

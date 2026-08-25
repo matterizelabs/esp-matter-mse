@@ -1,0 +1,3 @@
+# Generated factory partitions, onboarding codes and attestation key material.
+# These are per-device secrets / binaries and must not be committed.
+out/
