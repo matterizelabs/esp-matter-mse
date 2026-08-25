@@ -1,2 +1,3 @@
-def main():
-    raise SystemExit("not yet implemented")
+from matter_anim.cli import main
+if __name__ == "__main__":
+    raise SystemExit(main())
