@@ -3,6 +3,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include <string.h>
 
 #define TAG "anim_engine"
 #define LED_COUNT (CONFIG_MATRIX_WIDTH * CONFIG_MATRIX_HEIGHT)
@@ -13,7 +14,7 @@
 static ws2812_matrix_handle_t s_matrix;
 static QueueHandle_t s_q;          // queue of pointers into a static ring
 static uint8_t s_ring[RING_LEN][FRAME_BYTES];
-static int s_head = 0;             // next write slot
+static uint32_t s_head = 0;        // next write slot
 static volatile uint8_t s_brightness = 100;
 static volatile bool s_running = false;
 
@@ -43,9 +44,10 @@ esp_err_t anim_engine_init(ws2812_matrix_handle_t m) {
 
 bool anim_engine_push_frame(const uint8_t *chain_rgb, size_t len) {
     if (len != FRAME_BYTES) return false;
+    if (uxQueueSpacesAvailable(s_q) == 0) return false;  // clean drop if full (no slot corruption)
     uint8_t *slot = s_ring[s_head % RING_LEN];
     memcpy(slot, chain_rgb, FRAME_BYTES);
-    if (xQueueSend(s_q, &slot, 0) != pdTRUE) return false;  // drop if full (overrun)
+    if (xQueueSend(s_q, &slot, 0) != pdTRUE) return false;
     s_head++;
     return true;
 }
