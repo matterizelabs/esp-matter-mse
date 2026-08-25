@@ -137,12 +137,12 @@ Implementation: the existing `app_driver_attribute_update` routes standard-clust
 ## 9. Companion tool — `lottie2matter.py`
 
 1. Reads device geometry (`MatrixWidth/Height/Serpentine`) over Matter (read-by-id).
-2. Renders Lottie JSON to per-frame RGB bitmaps at W×H (30 fps, ≤ 30 s).
+2. Renders Lottie JSON to per-frame RGB bitmaps with **`rlottie-python` 1.3.8** — a prebuilt `abi3` wheel (works on Python 3.14) bundling the full rlottie renderer. `render_pillow_frame(frame_num, width=W, height=H)` returns a PIL `Image` directly at target size.
 3. Maps grid → chain order (serpentine flag), emits 144-B frames.
 4. Outputs: (a) `hex:` octet-string chunks for chip-tool `write-by-id`; (b) optionally a raw `.bin` for direct flash embedding.
 5. Later: streams directly as a Matter controller (Python `chip` bindings), replacing chip-tool.
 
-**Open tool-side decision:** Lottie rasterization approach (rlottie via FFI vs. headless render vs. pre-rendered frame export). rlottie has no official Python binding; this is the main tool-side risk to resolve during planning.
+**Rendering decision (resolved):** primary = `rlottie-python` (native, fast, feature-complete, verified wheel installs on this box). Fallback for exotic Lottie features rlottie can't handle = `puppeteer-lottie` (headless Chrome + `lottie-web`; Node v22 is installed).
 
 ## 10. Error handling
 
