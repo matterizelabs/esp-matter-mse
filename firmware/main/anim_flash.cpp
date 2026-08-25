@@ -26,6 +26,8 @@ esp_err_t anim_flash_init(void) {
         esp_partition_erase_range(s_part, 0, s_part->size);
         esp_partition_write(s_part, 0, &s_meta, sizeof(s_meta));
     }
+    for (int i = 0; i < ANIM_SLOT_COUNT; i++)
+        if (s_meta.slots[i].lru > s_tick) s_tick = s_meta.slots[i].lru;
     return ESP_OK;
 }
 int anim_flash_find(const uint8_t hash[32]) {
@@ -45,7 +47,11 @@ esp_err_t anim_flash_write(int slot, const uint8_t *data, size_t len) {
 }
 esp_err_t anim_flash_erase(int slot) {
     uint32_t off = DATA_OFFSET + (uint32_t)slot * ANIM_SLOT_SIZE;
-    return esp_partition_erase_range(s_part, off, ANIM_SLOT_SIZE);
+    esp_err_t err = esp_partition_erase_range(s_part, off, ANIM_SLOT_SIZE);
+    if (err != ESP_OK) return err;
+    s_meta.slots[slot].state = 0;
+    esp_partition_erase_range(s_part, 0, META_SIZE);
+    return esp_partition_write(s_part, 0, &s_meta, sizeof(s_meta));
 }
 esp_err_t anim_flash_commit(int slot, const uint8_t hash[32], uint16_t total_frames, uint8_t fps, uint8_t loop) {
     memcpy(s_meta.slots[slot].hash, hash, 32);
