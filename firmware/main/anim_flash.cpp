@@ -41,8 +41,8 @@ static int pick_lru_slot(void) {
     return pick;
 }
 int anim_flash_alloc_slot(void) { return pick_lru_slot(); }
-esp_err_t anim_flash_write(int slot, const uint8_t *data, size_t len) {
-    uint32_t off = DATA_OFFSET + (uint32_t)slot * ANIM_SLOT_SIZE;
+esp_err_t anim_flash_write(int slot, uint32_t offset, const uint8_t *data, size_t len) {
+    uint32_t off = DATA_OFFSET + (uint32_t)slot * ANIM_SLOT_SIZE + offset;
     return esp_partition_write(s_part, off, data, len);
 }
 esp_err_t anim_flash_erase(int slot) {
@@ -64,4 +64,11 @@ esp_err_t anim_flash_read_frame(int slot, uint32_t frame_index, uint8_t *out, si
     uint32_t off = DATA_OFFSET + (uint32_t)slot * ANIM_SLOT_SIZE + frame_index * FRAME_BYTES;
     if (out_len < FRAME_BYTES) return ESP_ERR_INVALID_SIZE;
     return esp_partition_read(s_part, off, out, FRAME_BYTES);
+}
+esp_err_t anim_flash_get_slot_info(int slot, uint16_t *total_frames, uint8_t *fps, uint8_t *loop) {
+    if (slot < 0 || slot >= ANIM_SLOT_COUNT || s_meta.slots[slot].state != 1) return ESP_ERR_INVALID_STATE;
+    if (total_frames) *total_frames = s_meta.slots[slot].total_frames;
+    if (fps) *fps = s_meta.slots[slot].fps;
+    if (loop) *loop = s_meta.slots[slot].loop;
+    return ESP_OK;
 }

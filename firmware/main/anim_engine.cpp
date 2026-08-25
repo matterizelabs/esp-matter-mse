@@ -71,6 +71,28 @@ static uint32_t s_write_cursor = 0;
 static uint16_t s_total = 0;
 static uint8_t s_pending_hash[32];
 static psa_hash_operation_t s_hash_op = PSA_HASH_OPERATION_INIT;
+static bool s_announced = false;
+static bool s_cached_hit = false;
+static int s_cache_slot = -1;
+static uint16_t s_cache_frames = 0;
+
+static void cache_fill_task(void *arg) {
+    uint32_t idx = 0;
+    for (int i = 0; i < RING_LEN && s_running; i++) {   // prime the ring buffer
+        uint8_t frame[FRAME_BYTES];
+        if (anim_flash_read_frame(s_cache_slot, idx, frame, FRAME_BYTES) != ESP_OK) break;
+        anim_engine_push_frame(frame, FRAME_BYTES);
+        idx = (idx + 1) % s_cache_frames;
+    }
+    while (s_running) {
+        vTaskDelay(pdMS_TO_TICKS(TICK_MS));
+        uint8_t frame[FRAME_BYTES];
+        if (anim_flash_read_frame(s_cache_slot, idx, frame, FRAME_BYTES) == ESP_OK)
+            anim_engine_push_frame(frame, FRAME_BYTES);
+        idx = (idx + 1) % s_cache_frames;
+    }
+    vTaskDelete(NULL);
+}
 
 void anim_set_status(uint8_t status) {
     ESP_LOGI(TAG, "transfer status -> %u", status);
@@ -85,6 +107,7 @@ void anim_handle_transfer_hash(const uint8_t *hash, size_t len) {
     if (len != 32) return;
     memcpy(s_pending_hash, hash, 32);
     s_slot = anim_flash_find(hash);
+    s_cached_hit = (s_slot >= 0);
     anim_set_status(s_slot >= 0 ? 4 /*READY*/ : 1 /*ANNOUNCED*/);
     if (s_slot < 0) {
         s_slot = anim_flash_alloc_slot();
@@ -94,6 +117,7 @@ void anim_handle_transfer_hash(const uint8_t *hash, size_t len) {
     psa_crypto_init();
     psa_hash_abort(&s_hash_op); /* safe no-op when already inactive */
     psa_hash_setup(&s_hash_op, PSA_ALG_SHA_256);
+    s_announced = true;
 }
 
 void anim_handle_transfer_meta(const uint8_t *meta, size_t len) {
@@ -112,13 +136,14 @@ void anim_handle_frame_chunk(const uint8_t *data, size_t len) {
     anim_chunk_hdr_t hdr;
     if (!anim_parse_chunk_header(data, len, &hdr)) return;
     if (hdr.width != CONFIG_MATRIX_WIDTH || hdr.height != CONFIG_MATRIX_HEIGHT) { anim_set_status(5 /*ERROR*/); return; }
-    const uint8_t *px = data + 6;
     size_t fsz = hdr.width * hdr.height * 3;
+    if (len < 6 + (size_t)hdr.count * fsz) { anim_set_status(5 /*ERROR*/); return; }
+    const uint8_t *px = data + 6;
     for (int k = 0; k < hdr.count; k++) {
         const uint8_t *frame = px + k * fsz;
         anim_engine_push_frame(frame, fsz);          /* play immediately */
         if (s_slot >= 0) {                            /* persist in background */
-            anim_flash_write(s_slot, frame, fsz);
+            anim_flash_write(s_slot, (uint32_t)(hdr.frame_index + k) * fsz, frame, fsz);
             s_write_cursor += fsz;
         }
         psa_hash_update(&s_hash_op, frame, fsz);
@@ -127,15 +152,40 @@ void anim_handle_frame_chunk(const uint8_t *data, size_t len) {
 }
 
 void anim_handle_play_cmd(uint8_t cmd) {
-    if (cmd == 1) { /* PLAY: verify hash, commit slot, start loop */
+    if (cmd == 1) { /* PLAY */
+        if (s_cached_hit) { /* hash already in flash: play from cache, no re-stream */
+            uint8_t fps = CONFIG_ANIM_FPS;
+            uint8_t loop = 1;
+            if (anim_flash_get_slot_info(s_slot, &s_cache_frames, &fps, &loop) != ESP_OK || s_cache_frames == 0) {
+                anim_set_status(5 /*ERROR*/);
+                return;
+            }
+            s_cache_slot = s_slot;
+            s_running = true;
+            xTaskCreate(cache_fill_task, "anim_cache_fill", 4096, NULL, 9, NULL);
+            anim_set_status(4 /*PLAYING*/);
+            return;
+        }
+        /* miss: verify streamed hash, commit slot, start loop */
+        if (!s_announced) { anim_set_status(5 /*ERROR*/); return; }
         uint8_t digest[32] = {0};
         size_t digest_len = 0;
-        psa_hash_finish(&s_hash_op, digest, sizeof(digest), &digest_len);
-        if (memcmp(digest, s_pending_hash, 32) != 0) { anim_set_status(5 /*ERROR*/); return; }
+        if (psa_hash_finish(&s_hash_op, digest, sizeof(digest), &digest_len) != PSA_SUCCESS || digest_len != 32) {
+            s_announced = false;
+            anim_set_status(5 /*ERROR*/);
+            return;
+        }
+        if (memcmp(digest, s_pending_hash, 32) != 0) {
+            s_announced = false;
+            anim_set_status(5 /*ERROR*/);
+            return;
+        }
         if (s_slot >= 0) anim_flash_commit(s_slot, s_pending_hash, s_total, CONFIG_ANIM_FPS, 1);
+        s_announced = false;
         s_running = true;
         anim_set_status(4 /*PLAYING*/);
     } else if (cmd == 2) { /* STOP */
-        anim_engine_stop();
+        s_running = false;
+        anim_set_status(0 /*IDLE*/);
     }
 }
