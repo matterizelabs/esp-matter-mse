@@ -10,9 +10,10 @@ def render_frames(lottie: dict, width, height, serpentine=True, max_frames=900):
     try:
         anim = LottieAnimation.from_file(path)
         w, h = anim.lottie_animation_get_size()
-        # rlottie reports totalframe inclusive of the out-point (op - ip + 1),
-        # but a Lottie animation has op - ip frames (op is the exclusive end).
-        total = max(0, int(anim.lottie_animation_get_totalframe()) - 1)
+        # Lottie's ip..op-1 semantics: an animation has op - ip frames. Derive
+        # the count from the data directly so it is independent of rlottie's
+        # undocumented get_totalframe() behavior.
+        total = max(0, int(lottie.get("op", 0)) - int(lottie.get("ip", 0)))
         total = min(total, max_frames)
         order = codec.serpentine_chain_order(width, height, serpentine)
         frames = []

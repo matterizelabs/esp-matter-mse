@@ -6,7 +6,9 @@ MINI_LOTTIE = {
     "layers": [{"ty": 4, "ind": 1, "ks": {"o": {"a": 0, "k": 100}, "r": {"a": 0, "k": 0},
         "p": {"a": 0, "k": [8, 8, 0]}, "a": {"a": 0, "k": [0, 0, 0]}, "s": {"a": 0, "k": [100, 100, 100]}},
         "shapes": [{"ty": "rc", "p": {"a": 0, "k": [0, 0]}, "s": {"a": 0, "k": [16, 16]},
-                     "nm": "r", "d": 1}], "ip": 0, "op": 3, "st": 0, "bm": 0}]
+                     "nm": "r", "d": 1},
+                    {"ty": "fl", "c": {"a": 0, "k": [1, 0, 0, 1]}, "o": {"a": 0, "k": 100},
+                     "r": 1, "nm": "f", "bm": 0}], "ip": 0, "op": 3, "st": 0, "bm": 0}]
 }
 
 def test_render_frames_shape_and_count(tmp_path):
@@ -17,6 +19,17 @@ def test_render_frames_shape_and_count(tmp_path):
     assert meta["width"] == 8 and meta["height"] == 6
     assert len(frames) == 3
     assert all(len(f) == 8 * 6 * 3 for f in frames)
+
+def test_render_produces_nonblank_pixels(tmp_path):
+    p = tmp_path / "m.json"
+    p.write_text(json.dumps(MINI_LOTTIE))
+    frames, meta = render.render_frames(json.loads(p.read_text()), 8, 6, True, max_frames=900)
+    assert len(frames) == 3
+    for f in frames:
+        assert len(f) == 8 * 6 * 3
+        # the full-canvas red rectangle must survive resize + RGB conversion
+        assert any(f[i:i + 3] == b"\xff\x00\x00" for i in range(0, len(f), 3))
+
 
 def test_render_caps_at_max_frames(tmp_path):
     big = dict(MINI_LOTTIE, op=2000)
