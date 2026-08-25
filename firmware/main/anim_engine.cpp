@@ -58,6 +58,7 @@ bool anim_engine_push_frame(const uint8_t *chain_rgb, size_t len) {
 }
 void anim_engine_set_brightness(uint8_t pct) { s_brightness = pct > 100 ? 100 : pct; }
 void anim_engine_stop(void) { s_running = false; }
+bool anim_engine_is_running(void) { return s_running; }
 
 /* ------------------------------------------------------------------------- */
 /* Transfer state machine:                                                    */
