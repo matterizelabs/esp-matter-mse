@@ -136,13 +136,28 @@ Implementation: the existing `app_driver_attribute_update` routes standard-clust
 
 ## 9. Companion tool — `lottie2matter.py`
 
-1. Reads device geometry (`MatrixWidth/Height/Serpentine`) over Matter (read-by-id).
-2. Renders Lottie JSON to per-frame RGB bitmaps with **`rlottie-python` 1.3.8** — a prebuilt `abi3` wheel (works on Python 3.14) bundling the full rlottie renderer. `render_pillow_frame(frame_num, width=W, height=H)` returns a PIL `Image` directly at target size.
-3. Maps grid → chain order (serpentine flag), emits 144-B frames.
-4. Outputs: (a) `hex:` octet-string chunks for chip-tool `write-by-id`; (b) optionally a raw `.bin` for direct flash embedding.
-5. Later: streams directly as a Matter controller (Python `chip` bindings), replacing chip-tool.
+A **pure local CLI** — no browser, no network/API, no external service. Point it at a local file; it emits the exact wire payload.
 
-**Rendering decision (resolved):** primary = `rlottie-python` (native, fast, feature-complete, verified wheel installs on this box). Fallback for exotic Lottie features rlottie can't handle = `puppeteer-lottie` (headless Chrome + `lottie-web`; Node v22 is installed).
+**Input (auto-detected, any one):**
+- `.lottie` (dotLottie ZIP archive) — extract via stdlib `zipfile`, read `manifest.json`, locate the animation JSON.
+- Lottie `.json`
+- optimized/minified Lottie JSON
+
+**Pipeline:**
+1. Geometry from CLI args (`--width 8 --height 6 --serpentine`), with defaults; optionally read from the device over Matter when online.
+2. Render with **`rlottie-python` 1.3.8** (local, native, bundled rlottie — no browser). `render_pillow_frame(i, width=W, height=H)` returns a PIL `Image` at target size, for each frame up to 900 (30 s @ 30 fps).
+3. Serpentine-map each frame to chain order → 144-B frames.
+4. Compute **SHA-256** over the concatenated frames (matches the device's verification hash).
+
+**Output (deterministic, stdout):**
+- animation hash (hex)
+- `TransferMeta` hex (`[total_frames u16][fps u8][loop u8][width u8][height u8]`)
+- `FrameChunk` hex payloads, packed ≤ ~1 KB each (≤ 6 frames)
+- optionally, ready-to-paste `chip-tool write-by-id` command lines
+
+Later (v2): the tool streams directly as a Matter controller (Python `chip` bindings), replacing chip-tool.
+
+**Rendering decision (resolved):** `rlottie-python` only — native, fast, feature-complete, verified wheel installs on this box. No browser-based fallback (per requirement).
 
 ## 10. Error handling
 
