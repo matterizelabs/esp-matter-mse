@@ -18,6 +18,7 @@
 - All writable cluster attributes are octet strings; chip-tool writes use `hex:` encoding. Control via `chip-tool any write-by-id <cluster> <attr> <val> <node-id> <endpoint-id>`.
 - Target `esp32`, flashed at `/dev/ttyUSB0`. esp-idf `v6.0.2`, esp-matter `release-v1.6`.
 - Playback reads ONLY from RAM; network/flash never gate a frame.
+- **Firmware build recipe (every `idf.py build` assumes this environment is sourced first):** `export IDF_PATH=$HOME/.espressif/versions/esp-idf/v6.0.2; export ESP_MATTER_PATH=$HOME/.espressif/versions/esp-matter/release-v1.6; export ESP_MATTER_DEVICE_PATH=$PWD/firmware/components/ws2812_board; . $IDF_PATH/export.sh; . $ESP_MATTER_PATH/export.sh; export PATH="$ESP_MATTER_PATH/connectedhomeip/connectedhomeip/.environment/cipd/packages/pigweed:$PATH"`. (The esp-matter `export.sh` and CIPD `gn` PATH are required — omitting them fails the `chip_gn` configure step.)
 
 ---
 
@@ -571,7 +572,7 @@ CONFIG_BT_NIMBLE_ENABLE_CONN_REATTEMPT=n
 CONFIG_LWIP_IPV6_AUTOCONFIG=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
-CONFIG_PARTITION_TABLE_OFFSET=0xC000
+CONFIG_PARTITION_TABLE_OFFSET=0x8000
 CONFIG_ENABLE_CHIP_SHELL=y
 CONFIG_ENABLE_WIFI_AP=n
 CONFIG_LWIP_HOOK_IP6_ROUTE_DEFAULT=y
