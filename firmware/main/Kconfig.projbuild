@@ -1,0 +1,19 @@
+# firmware/main/Kconfig.projbuild
+menu "WS2812 Matrix"
+    config WS2812_GPIO
+        int "WS2812 data GPIO"
+        default 5
+        range 0 39
+    config MATRIX_WIDTH
+        int "Matrix width"
+        default 8
+    config MATRIX_HEIGHT
+        int "Matrix height"
+        default 6
+    config MATRIX_SERPENTINE
+        bool "Serpentine (zigzag) wiring"
+        default y
+    config ANIM_FPS
+        int "Animation FPS"
+        default 30
+endmenu
