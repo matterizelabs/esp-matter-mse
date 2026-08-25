@@ -21,6 +21,7 @@
 #include <app_priv.h>
 #include <app_reset.h>
 #include "anim_cluster.h"
+#include "anim_engine.h"
 #if CHIP_DEVICE_CONFIG_ENABLE_THREAD
 #include <platform/ESP32/OpenthreadLauncher.h>
 #endif
@@ -156,6 +157,13 @@ static esp_err_t app_attribute_update_cb(attribute::callback_type_t type, uint16
     esp_err_t err = ESP_OK;
 
     if (type == PRE_UPDATE) {
+        if (cluster_id == anim::CLUSTER_ID) {
+            if (attribute_id == anim::ATTR_TRANSFER_HASH) anim_handle_transfer_hash(val->val.a.b, val->val.a.s);
+            else if (attribute_id == anim::ATTR_TRANSFER_META) anim_handle_transfer_meta(val->val.a.b, val->val.a.s);
+            else if (attribute_id == anim::ATTR_FRAME_CHUNK) anim_handle_frame_chunk(val->val.a.b, val->val.a.s);
+            else if (attribute_id == anim::ATTR_PLAY_CMD) anim_handle_play_cmd(val->val.a.b[0]);
+            return ESP_OK;
+        }
         /* Driver update */
         app_driver_handle_t driver_handle = (app_driver_handle_t)priv_data;
         err = app_driver_attribute_update(driver_handle, endpoint_id, cluster_id, attribute_id, val);

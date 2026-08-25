@@ -2,6 +2,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct {
     uint16_t frame_index;
@@ -12,3 +15,7 @@ typedef struct {
 } anim_chunk_hdr_t;
 
 bool anim_parse_chunk_header(const uint8_t *buf, size_t len, anim_chunk_hdr_t *out);
+
+#ifdef __cplusplus
+}
+#endif
