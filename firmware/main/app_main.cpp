@@ -22,6 +22,7 @@
 #include <app_reset.h>
 #include "anim_cluster.h"
 #include "anim_engine.h"
+#include "anim_flash.h"
 #if CHIP_DEVICE_CONFIG_ENABLE_THREAD
 #include <platform/ESP32/OpenthreadLauncher.h>
 #endif
@@ -250,6 +251,10 @@ extern "C" void app_main()
     static_cast<ESP32FactoryDataProvider *>(dac_provider)->SetCertificationDeclaration(cdSpan);
 #endif
 #endif // CONFIG_ENABLE_SET_CERT_DECLARATION_API
+
+    /* Initialize the animation flash cache */
+    err = anim_flash_init();
+    ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to init animation flash cache, err:%d", err));
 
     /* Matter start */
     err = esp_matter::start(app_event_cb);
