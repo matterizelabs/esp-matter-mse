@@ -186,6 +186,7 @@ void anim_handle_play_cmd(uint8_t cmd) {
         s_announced = false;
         xQueueReset(s_q);                    // discard the stale streamed frames already in the ring
         s_cache_slot = s_slot;
+        if (s_total == 0) { anim_set_status(5); return; }
         s_cache_frames = s_total;
         s_running = true;
         xTaskCreate(cache_fill_task, "anim_cache_fill", 4096, NULL, 9, NULL);
