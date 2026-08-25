@@ -81,7 +81,7 @@ Attributes are used for control (not commands) so **chip-tool's `write-by-id` wo
 | `TransferMeta` | `0x0006` | octet string(6) | W | `[total_frames u16][fps u8][loop u8][width u8][height u8]` |
 | `FrameChunk` | `0x0007` | octet string(≤~1 KB) | W | N frames (see §6) |
 | `TransferStatus` | `0x0008` | enum8 | R | IDLE=0, ANNOUNCED=1, RECEIVING=2, VERIFYING=3, READY=4, ERROR=5 |
-| `PlayCmd` | `0x0009` | enum8 | W | NONE=0, PLAY=1, STOP=2, CLEAR_CACHE=3 (write triggers action) |
+| `PlayCmd` | `0x0009` | octet string(1) | W | `hex:00` NONE, `hex:01` PLAY, `hex:02` STOP, `hex:03` CLEAR_CACHE (write triggers action) |
 | `ActiveAnimation` | `0x000A` | octet string(32) | R | hash currently playing (zero = none) |
 
 The cluster lives on the **same endpoint** as the extended color light (endpoint 1), with `priv_data` pointing at the animation engine.
@@ -149,11 +149,23 @@ A **pure local CLI** — no browser, no network/API, no external service. Point 
 3. Serpentine-map each frame to chain order → 144-B frames.
 4. Compute **SHA-256** over the concatenated frames (matches the device's verification hash).
 
-**Output (deterministic, stdout):**
-- animation hash (hex)
-- `TransferMeta` hex (`[total_frames u16][fps u8][loop u8][width u8][height u8]`)
-- `FrameChunk` hex payloads, packed ≤ ~1 KB each (≤ 6 frames)
-- optionally, ready-to-paste `chip-tool write-by-id` command lines
+**Output (deterministic, stdout) — ready to paste:**
+
+Every writable attribute is an octet string, so every command uses the same unambiguous `hex:` encoding. The tool emits a complete, ordered sequence of `chip-tool` commands:
+
+```
+./chip-tool any write-by-id 0x1618FC01 0x0005 hex:<hash32>          <node-id> 1   # TransferHash (announce)
+./chip-tool any write-by-id 0x1618FC01 0x0006 hex:<meta6>           <node-id> 1   # TransferMeta
+./chip-tool any write-by-id 0x1618FC01 0x0007 hex:<chunk1>          <node-id> 1   # FrameChunk 1..N
+...
+./chip-tool any write-by-id 0x1618FC01 0x0009 hex:01                <node-id> 1   # PlayCmd = PLAY
+```
+
+`syntax (verified from chip-tool guide): ./chip-tool any write-by-id <cluster-ids> <attribute-ids> <attribute-values> <destination-id> <endpoint-id>`
+
+- `<node-id>` from `--node-id` (default `1`).
+- The same lines (minus the `./chip-tool` prefix) paste directly into `chip-tool interactive start` for higher throughput.
+- Also emits the SHA-256 hash and `TransferMeta` hex to stderr for logging/verification.
 
 Later (v2): the tool streams directly as a Matter controller (Python `chip` bindings), replacing chip-tool.
 
