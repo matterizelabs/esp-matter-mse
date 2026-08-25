@@ -6,7 +6,7 @@
 
 **Architecture:** A companion Python tool renders Lottie → 48-LED RGB frames → wire payloads (SHA-256 + hex chunks). The ESP32 exposes a custom Matter vendor cluster (`0x1618FC01`, attribute-based so chip-tool `write-by-id` works with no rebuild). Frames stream in, are played from a RAM jitter buffer at 30 fps, and are persisted to a flash cache (5 slots, LRU) by a background task. Standard OnOff/Level/ColorControl clusters layer on top (power / brightness-multiplier / exit-to-static).
 
-**Tech Stack:** esp-idf `v6.0.2`, esp-matter `release-v1.6`, ESP32 (RMT + `led_strip`), C++17 firmware; Python 3.14 + `rlottie-python` 1.3.8 + Pillow + stdlib `zipfile`/`hashlib`/`struct`; `pytest` for tool tests; `chip-tool` (interactive) for the controller.
+**Tech Stack:** esp-idf `v6.0.2`, esp-matter `release-v1.6`, ESP32 (RMT + `led_strip`), C++17 firmware; Python 3.14 + `uv` (package/tooling) + `rlottie-python` 1.3.8 + Pillow + stdlib `zipfile`/`hashlib`/`struct`; `pytest` (via `uv run`) for tool tests; `chip-tool` (interactive) for the controller.
 
 **Spec:** `docs/superpowers/specs/2026-08-25-matter-ws2812-animation-design.md`
 
@@ -51,10 +51,19 @@
 
 **Files:**
 - Create: `tools/matter_anim/__init__.py`, `tools/matter_anim/loader.py`, `tools/lottie2matter.py`, `tools/tests/test_loader.py`
-- Create: `tools/requirements.txt`, `tools/tests/conftest.py`
+- Create: `tools/pyproject.toml`, `tools/tests/conftest.py`
 
 **Interfaces:**
 - Produces: `loader.load_animation(path: str) -> dict` (returns the Lottie JSON dict for any accepted input); `loader.SUPPORTED = ('.lottie', '.json')`.
+
+- [ ] **Step 0: Initialize the uv project and dependencies**
+
+```bash
+mkdir -p tools/matter_anim tools/tests && touch tools/matter_anim/__init__.py tools/tests/conftest.py
+cd tools && uv init --name lottie2matter --package && uv add pillow rlottie-python && uv add --dev pytest
+```
+
+This creates `tools/pyproject.toml` (with `matter_anim` as the package, `pillow` + `rlottie-python` as runtime deps, `pytest` as dev dep) and `tools/uv.lock`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -95,7 +104,7 @@ def test_rejects_unknown_extension(tmp_path):
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd tools && python -m pytest tests/test_loader.py -v`
+Run: `cd tools && uv run pytest tests/test_loader.py -v`
 Expected: FAIL (module not found).
 
 - [ ] **Step 3: Implement**
@@ -135,7 +144,7 @@ def main():
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd tools && python -m pytest tests/test_loader.py -v`
+Run: `cd tools && uv run pytest tests/test_loader.py -v`
 Expected: PASS (3 passed).
 
 - [ ] **Step 5: Commit**
@@ -197,7 +206,7 @@ def test_pack_chunks_max_1kb():
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd tools && python -m pytest tests/test_codec.py -v`
+Run: `cd tools && uv run pytest tests/test_codec.py -v`
 Expected: FAIL (module not found).
 
 - [ ] **Step 3: Implement**
@@ -251,7 +260,7 @@ def pack_chunks(frames, width, height, fps):
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd tools && python -m pytest tests/test_codec.py -v`
+Run: `cd tools && uv run pytest tests/test_codec.py -v`
 Expected: PASS (7 passed).
 
 - [ ] **Step 5: Commit**
@@ -303,7 +312,7 @@ def test_render_caps_at_max_frames(tmp_path):
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd tools && python -m pytest tests/test_render.py -v`
+Run: `cd tools && uv run pytest tests/test_render.py -v`
 Expected: FAIL (module not found).
 
 - [ ] **Step 3: Implement**
@@ -340,7 +349,7 @@ def render_frames(lottie: dict, width, height, serpentine=True, max_frames=900):
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd tools && python -m pytest tests/test_render.py -v`
+Run: `cd tools && uv run pytest tests/test_render.py -v`
 Expected: PASS (2 passed).
 
 - [ ] **Step 5: Commit**
@@ -393,7 +402,7 @@ def test_main_end_to_end(tmp_path, capsys):
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd tools && python -m pytest tests/test_cli.py -v`
+Run: `cd tools && uv run pytest tests/test_cli.py -v`
 Expected: FAIL (module not found).
 
 - [ ] **Step 3: Implement**
@@ -446,12 +455,12 @@ if __name__ == "__main__":
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd tools && python -m pytest tests/test_cli.py -v`
+Run: `cd tools && uv run pytest tests/test_cli.py -v`
 Expected: PASS (2 passed).
 
 - [ ] **Step 5: Run the full tool suite**
 
-Run: `cd tools && python -m pytest -v`
+Run: `cd tools && uv run pytest -v`
 Expected: PASS (14 tests).
 
 - [ ] **Step 6: Commit**
