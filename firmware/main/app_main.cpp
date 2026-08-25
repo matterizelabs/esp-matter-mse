@@ -162,7 +162,7 @@ static esp_err_t app_attribute_update_cb(attribute::callback_type_t type, uint16
             if (attribute_id == anim::ATTR_TRANSFER_HASH) anim_handle_transfer_hash(val->val.a.b, val->val.a.s);
             else if (attribute_id == anim::ATTR_TRANSFER_META) anim_handle_transfer_meta(val->val.a.b, val->val.a.s);
             else if (attribute_id == anim::ATTR_FRAME_CHUNK) anim_handle_frame_chunk(val->val.a.b, val->val.a.s);
-            else if (attribute_id == anim::ATTR_PLAY_CMD) anim_handle_play_cmd(val->val.a.b[0]);
+            else if (attribute_id == anim::ATTR_PLAY_CMD && val->val.a.s >= 1) anim_handle_play_cmd(val->val.a.b[0]);
             return ESP_OK;
         }
         /* Driver update */

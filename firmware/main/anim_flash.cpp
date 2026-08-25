@@ -42,6 +42,8 @@ static int pick_lru_slot(void) {
 }
 int anim_flash_alloc_slot(void) { return pick_lru_slot(); }
 esp_err_t anim_flash_write(int slot, uint32_t offset, const uint8_t *data, size_t len) {
+    if (slot < 0 || slot >= ANIM_SLOT_COUNT || (uint32_t)len > ANIM_SLOT_SIZE || offset > ANIM_SLOT_SIZE - len)
+        return ESP_ERR_INVALID_ARG;
     uint32_t off = DATA_OFFSET + (uint32_t)slot * ANIM_SLOT_SIZE + offset;
     return esp_partition_write(s_part, off, data, len);
 }

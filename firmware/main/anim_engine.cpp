@@ -161,6 +161,7 @@ void anim_handle_play_cmd(uint8_t cmd) {
                 anim_set_status(5 /*ERROR*/);
                 return;
             }
+            xQueueReset(s_q);                    // discard the stale streamed frames already in the ring
             s_cache_slot = s_slot;
             s_running = true;
             xTaskCreate(cache_fill_task, "anim_cache_fill", 4096, NULL, 9, NULL);
@@ -183,7 +184,11 @@ void anim_handle_play_cmd(uint8_t cmd) {
         }
         if (s_slot >= 0) anim_flash_commit(s_slot, s_pending_hash, s_total, CONFIG_ANIM_FPS, 1);
         s_announced = false;
+        xQueueReset(s_q);                    // discard the stale streamed frames already in the ring
+        s_cache_slot = s_slot;
+        s_cache_frames = s_total;
         s_running = true;
+        xTaskCreate(cache_fill_task, "anim_cache_fill", 4096, NULL, 9, NULL);
         anim_set_status(4 /*PLAYING*/);
     } else if (cmd == 2) { /* STOP */
         s_running = false;
