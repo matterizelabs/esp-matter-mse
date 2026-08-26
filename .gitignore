@@ -1,7 +1,7 @@
 # Agent workspace state
 .pi/
 
-# Design/process docs (spec + implementation plan) — not part of the product
+# Design/process docs (spec + implementation plan) - not part of the product
 docs/superpowers/
 
 # ESP-IDF build artifacts (generated)

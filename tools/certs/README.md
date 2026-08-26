@@ -2,7 +2,7 @@
 
 Test (development) attestation material for the Matterize Labs "WS2812 Animation
 Light" (VID `0x1618`, PID `0x0001`). Everything here uses the Matter **test**
-credentials shipped with the connectedhomeip checkout — do not use for
+credentials shipped with the connectedhomeip checkout - do not use for
 production.
 
 Generated binaries and private keys are **not** committed: they land in
@@ -83,5 +83,5 @@ parttool.py -p /dev/ttyUSB0 write_partition --partition-name fctry \
 
 ## 5. Verify VID/PID (chip-tool)
 
-Commission with chip-tool and read `Basic Information` — it must report
+Commission with chip-tool and read `Basic Information` - it must report
 VID `0x1618` and PID `0x0001`.
