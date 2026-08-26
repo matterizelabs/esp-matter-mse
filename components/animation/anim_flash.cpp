@@ -1,4 +1,4 @@
-#include "anim_flash.h"
+#include "animation.h"
 #include "esp_partition.h"
 #include "esp_log.h"
 #include <string.h>
@@ -12,10 +12,10 @@ typedef struct {
     uint32_t magic;
     uint32_t version;
     struct { uint8_t hash[32]; uint16_t total_frames; uint8_t fps, loop, state; uint32_t lru; } slots[ANIM_SLOT_COUNT];
-} anim_meta_t;
+} anim_flash_meta_t;
 
 static const esp_partition_t *s_part;
-static anim_meta_t s_meta;
+static anim_flash_meta_t s_meta;
 static uint32_t s_tick = 0;
 
 esp_err_t anim_flash_init(void) {

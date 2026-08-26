@@ -6,9 +6,8 @@ if(NOT DEFINED ENV{ESP_MATTER_PATH})
     message(FATAL_ERROR "Please set ESP_MATTER_PATH to the path of esp-matter repo")
 endif(NOT DEFINED ENV{ESP_MATTER_PATH})
 
-# Board profile is part of this repo — set the env var the SDK's device component expects.
-# (No need to export ESP_MATTER_DEVICE_PATH in the shell.)
-set(ENV{ESP_MATTER_DEVICE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/components/ws2812_board")
+# Board profile is part of this repo; set the env var the SDK's build expects.
+set(ENV{ESP_MATTER_DEVICE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/components/ws2812_matrix")
 
 if(NOT DEFINED CLI_PROJECT_VER)
     set(PROJECT_VER "1.0")
@@ -34,7 +33,6 @@ set(EXTRA_COMPONENT_DIRS
     "${ESP_MATTER_PATH}/examples/common"
     "${MATTER_SDK_PATH}/config/esp32/components"
     "${ESP_MATTER_PATH}/components"
-    "${ESP_MATTER_PATH}/device_hal/device"
     ${extra_components_dirs_append})
 
 project(light)

@@ -14,12 +14,12 @@
 #include <app_priv.h>
 #include <common_macros.h>
 
-#include <device.h>
 #include <button_gpio.h>
+#include <iot_button.h>
 
 #include <color_format.h>
 #include "ws2812_matrix.h"
-#include "anim_engine.h"
+#include "animation.h"
 
 using namespace chip::app::Clusters;
 using namespace esp_matter;

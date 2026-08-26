@@ -1,0 +1,32 @@
+{
+  "cluster_id": "0x1618FC01",
+  "chunk_max_bytes": 1000,
+  "hash": "sha256",
+  "attributes": {
+    "matrix_width": "0x0000",
+    "matrix_height": "0x0001",
+    "pixel_count": "0x0002",
+    "serpentine": "0x0003",
+    "cached": "0x0004",
+    "transfer_hash": "0x0005",
+    "transfer_meta": "0x0006",
+    "frame_chunk": "0x0007",
+    "status": "0x0008",
+    "play_cmd": "0x0009",
+    "active": "0x000A"
+  },
+  "frame_chunk_header": [
+    ["frame_index", "u16"],
+    ["count", "u8"],
+    ["width", "u8"],
+    ["height", "u8"],
+    ["fps", "u8"]
+  ],
+  "transfer_meta": [
+    ["total_frames", "u16"],
+    ["fps", "u8"],
+    ["loop", "u8"],
+    ["width", "u8"],
+    ["height", "u8"]
+  ]
+}

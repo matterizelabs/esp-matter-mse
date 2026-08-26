@@ -1,4 +1,4 @@
-#include "anim_cluster.h"
+#include "animation.h"
 using namespace esp_matter;
 static uint8_t s_hash[32] = {0}, s_meta[6] = {0}, s_frame[1100] = {0};
 static uint8_t s_cmd[1] = {0}, s_active[32] = {0}, s_cached[160] = {0};

@@ -20,9 +20,7 @@
 
 #include <app_priv.h>
 #include <app_reset.h>
-#include "anim_cluster.h"
-#include "anim_engine.h"
-#include "anim_flash.h"
+#include "animation.h"
 #if CHIP_DEVICE_CONFIG_ENABLE_THREAD
 #include <platform/ESP32/OpenthreadLauncher.h>
 #endif
@@ -56,7 +54,7 @@ extern const uint8_t cd_start[] asm("_binary_certification_declaration_der_start
 extern const uint8_t cd_end[] asm("_binary_certification_declaration_der_end");
 
 const chip::ByteSpan cdSpan(cd_start, static_cast<size_t>(cd_end - cd_start));
-#endif // CONFIG_ENABLE_SET_CERT_DECLARATION_API
+#endif /* CONFIG_ENABLE_SET_CERT_DECLARATION_API */
 
 #if CONFIG_ENABLE_ENCRYPTED_OTA
 extern const char decryption_key_start[] asm("_binary_esp_image_encryption_key_pem_start");
@@ -64,7 +62,7 @@ extern const char decryption_key_end[] asm("_binary_esp_image_encryption_key_pem
 
 static const char *s_decryption_key = decryption_key_start;
 static const uint16_t s_decryption_key_len = decryption_key_end - decryption_key_start;
-#endif // CONFIG_ENABLE_ENCRYPTED_OTA
+#endif /* CONFIG_ENABLE_ENCRYPTED_OTA */
 
 static void app_event_cb(const ChipDeviceEvent *event, intptr_t arg)
 {
@@ -140,8 +138,8 @@ static void app_event_cb(const ChipDeviceEvent *event, intptr_t arg)
     }
 }
 
-// This callback is invoked when clients interact with the Identify Cluster.
-// In the callback implementation, an endpoint can identify itself. (e.g., by flashing an LED or light).
+/* This callback is invoked when clients interact with the Identify Cluster. */
+/* In the callback implementation, an endpoint can identify itself. (e.g., by flashing an LED or light). */
 static esp_err_t app_identification_cb(identification::callback_type_t type, uint16_t endpoint_id, uint8_t effect_id,
                                        uint8_t effect_variant, void *priv_data)
 {
@@ -149,9 +147,9 @@ static esp_err_t app_identification_cb(identification::callback_type_t type, uin
     return ESP_OK;
 }
 
-// This callback is called for every attribute update. The callback implementation shall
-// handle the desired attributes and return an appropriate error code. If the attribute
-// is not of your interest, please do not return an error code and strictly return ESP_OK.
+/* This callback is called for every attribute update. The callback implementation shall */
+/* handle the desired attributes and return an appropriate error code. If the attribute */
+/* is not of your interest, please do not return an error code and strictly return ESP_OK. */
 static esp_err_t app_attribute_update_cb(attribute::callback_type_t type, uint16_t endpoint_id, uint32_t cluster_id,
                                          uint32_t attribute_id, esp_matter_attr_val_t *val, void *priv_data)
 {
@@ -190,7 +188,7 @@ extern "C" void app_main()
     /* Create a Matter node and add the mandatory Root Node device type on endpoint 0 */
     node::config_t node_config;
 
-    // node handle can be used to add/modify other endpoints.
+    /* node handle can be used to add/modify other endpoints. */
     node_t *node = node::create(&node_config, app_attribute_update_cb, app_identification_cb);
     ABORT_APP_ON_FAILURE(node != nullptr, ESP_LOGE(TAG, "Failed to create Matter node"));
 
@@ -206,7 +204,7 @@ extern "C" void app_main()
     light_config.color_control.enhanced_color_mode = (uint8_t)ColorControl::ColorMode::kColorTemperature;
     light_config.color_control_color_temperature.start_up_color_temperature_mireds = nullptr;
 
-    // endpoint handles can be used to add/modify clusters.
+    /* endpoint handles can be used to add/modify clusters. */
     endpoint_t *endpoint = extended_color_light::create(node, &light_config, ENDPOINT_FLAG_NONE, light_handle);
     ABORT_APP_ON_FAILURE(endpoint != nullptr, ESP_LOGE(TAG, "Failed to create extended color light endpoint"));
 
@@ -227,7 +225,7 @@ extern "C" void app_main()
     attribute::set_deferred_persistence(color_temp_attribute);
 
 #if CHIP_DEVICE_CONFIG_ENABLE_THREAD && CHIP_DEVICE_CONFIG_ENABLE_WIFI_STATION
-    // Enable secondary network interface
+    /* Enable secondary network interface */
     secondary_network_interface::config_t secondary_network_interface_config;
     endpoint = endpoint::secondary_network_interface::create(node, &secondary_network_interface_config, ENDPOINT_FLAG_NONE, nullptr);
     ABORT_APP_ON_FAILURE(endpoint != nullptr, ESP_LOGE(TAG, "Failed to create secondary network interface endpoint"));
@@ -254,7 +252,7 @@ extern "C" void app_main()
     if (cd_err != CHIP_NO_ERROR) {
         ESP_LOGE(TAG, "Failed to set certification declaration, err:%" CHIP_ERROR_FORMAT, cd_err.Format());
     }
-#endif // CONFIG_ENABLE_SET_CERT_DECLARATION_API
+#endif /* CONFIG_ENABLE_SET_CERT_DECLARATION_API */
 
     /* Initialize the animation flash cache */
     err = anim_flash_init();
@@ -272,7 +270,7 @@ extern "C" void app_main()
 #if CONFIG_ENABLE_ENCRYPTED_OTA
     err = esp_matter_ota_requestor_encrypted_init(s_decryption_key, s_decryption_key_len);
     ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to initialized the encrypted OTA, err: %d", err));
-#endif // CONFIG_ENABLE_ENCRYPTED_OTA
+#endif /* CONFIG_ENABLE_ENCRYPTED_OTA */
 
 #if CONFIG_ENABLE_CHIP_SHELL
     esp_matter::console::diagnostics_register_commands();

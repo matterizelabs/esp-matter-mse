@@ -1,11 +1,15 @@
 import hashlib, struct
 
-CLUSTER_ID = 0x1618FC01
-ATTR_TRANSFER_HASH = 0x0005
-ATTR_TRANSFER_META = 0x0006
-ATTR_FRAME_CHUNK = 0x0007
-ATTR_PLAY_CMD = 0x0009
-MAX_CHUNK_BYTES = 1000
+from matter_anim.protocol import (
+    CLUSTER_ID,
+    ATTR_TRANSFER_HASH,
+    ATTR_TRANSFER_META,
+    ATTR_FRAME_CHUNK,
+    ATTR_PLAY_CMD,
+    MAX_CHUNK_BYTES,
+    CHUNK_HEADER_FMT,
+    META_FMT,
+)
 
 def serpentine_chain_order(width, height, serpentine=True):
     order = []
@@ -24,11 +28,11 @@ def frame_to_bytes(frame_pixels, order):
     return bytes(out)
 
 def encode_chunk(frame_index, frames, width, height, fps):
-    header = struct.pack("<HBBBB", frame_index, len(frames), width, height, fps)
+    header = struct.pack(CHUNK_HEADER_FMT, frame_index, len(frames), width, height, fps)
     return header + b"".join(frames)
 
 def encode_meta(total_frames, fps, loop, width, height):
-    return struct.pack("<HBBBB", total_frames, fps, loop, width, height)
+    return struct.pack(META_FMT, total_frames, fps, loop, width, height)
 
 def animation_hash(frames):
     return hashlib.sha256(b"".join(frames)).digest()

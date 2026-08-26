@@ -1,4 +1,4 @@
-#include "anim_codec.h"
+#include "anim_protocol.h"
 
 bool anim_parse_chunk_header(const uint8_t *buf, size_t len, anim_chunk_hdr_t *out) {
     if (!buf || !out || len < 6) return false;

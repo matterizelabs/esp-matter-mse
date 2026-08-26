@@ -1,7 +1,4 @@
-#include "anim_engine.h"
-#include "anim_codec.h"
-#include "anim_flash.h"
-#include "anim_cluster.h"
+#include "animation.h"
 #include "esp_log.h"
 #include "esp_matter.h"
 #include "freertos/FreeRTOS.h"
@@ -17,9 +14,9 @@
 #define TICK_MS (1000 / CONFIG_ANIM_FPS)
 
 static ws2812_matrix_handle_t s_matrix;
-static QueueHandle_t s_q;          // queue of pointers into a static ring
+static QueueHandle_t s_q;          /* queue of pointers into a static ring */
 static uint8_t s_ring[RING_LEN][FRAME_BYTES];
-static uint32_t s_head = 0;        // next write slot
+static uint32_t s_head = 0;        /* next write slot */
 static volatile uint8_t s_brightness = 100;
 static volatile bool s_running = false;
 
@@ -29,7 +26,7 @@ static void playback_task(void *arg) {
             void *slot = NULL;
             if (xQueueReceive(s_q, &slot, pdMS_TO_TICKS(TICK_MS)) == pdTRUE) {
                 uint8_t *frame = (uint8_t *)slot;
-                // apply master brightness in-place (copy to scratch)
+                /* apply master brightness in-place (copy to scratch) */
                 static uint8_t scratch[FRAME_BYTES];
                 for (int i = 0; i < FRAME_BYTES; i++) scratch[i] = frame[i] * s_brightness / 100;
                 ws2812_matrix_show_frame(s_matrix, scratch, FRAME_BYTES);
@@ -49,7 +46,7 @@ esp_err_t anim_engine_init(ws2812_matrix_handle_t m) {
 
 bool anim_engine_push_frame(const uint8_t *chain_rgb, size_t len) {
     if (len != FRAME_BYTES) return false;
-    if (uxQueueSpacesAvailable(s_q) == 0) return false;  // clean drop if full (no slot corruption)
+    if (uxQueueSpacesAvailable(s_q) == 0) return false;  /* clean drop if full (no slot corruption) */
     uint8_t *slot = s_ring[s_head % RING_LEN];
     memcpy(slot, chain_rgb, FRAME_BYTES);
     if (xQueueSend(s_q, &slot, 0) != pdTRUE) return false;
@@ -79,7 +76,7 @@ static uint16_t s_cache_frames = 0;
 
 static void cache_fill_task(void *arg) {
     uint32_t idx = 0;
-    for (int i = 0; i < RING_LEN && s_running; i++) {   // prime the ring buffer
+    for (int i = 0; i < RING_LEN && s_running; i++) {   /* prime the ring buffer */
         uint8_t frame[FRAME_BYTES];
         if (anim_flash_read_frame(s_cache_slot, idx, frame, FRAME_BYTES) != ESP_OK) break;
         anim_engine_push_frame(frame, FRAME_BYTES);
@@ -161,7 +158,7 @@ void anim_handle_play_cmd(uint8_t cmd) {
                 anim_set_status(5 /*ERROR*/);
                 return;
             }
-            xQueueReset(s_q);                    // discard the stale streamed frames already in the ring
+            xQueueReset(s_q);                    /* discard the stale streamed frames already in the ring */
             s_cache_slot = s_slot;
             s_running = true;
             xTaskCreate(cache_fill_task, "anim_cache_fill", 4096, NULL, 9, NULL);
@@ -184,7 +181,7 @@ void anim_handle_play_cmd(uint8_t cmd) {
         }
         if (s_slot >= 0) anim_flash_commit(s_slot, s_pending_hash, s_total, CONFIG_ANIM_FPS, 1);
         s_announced = false;
-        xQueueReset(s_q);                    // discard the stale streamed frames already in the ring
+        xQueueReset(s_q);                    /* discard the stale streamed frames already in the ring */
         s_cache_slot = s_slot;
         if (s_total == 0) { anim_set_status(5); return; }
         s_cache_frames = s_total;
