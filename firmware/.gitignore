@@ -1,8 +1,0 @@
-# ESP-IDF build artifacts (generated)
-build/
-sdkconfig
-sdkconfig.old
-
-# Component manager artifacts (generated)
-managed_components/
-dependencies.lock
