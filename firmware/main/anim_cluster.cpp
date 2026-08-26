@@ -12,7 +12,7 @@ cluster_t *anim::anim_cluster_create(endpoint_t *ep) {
     attribute::create(c, ATTR_CACHED, ATTRIBUTE_FLAG_NONE, esp_matter_octet_str(s_cached, 160), 160);
     attribute::create(c, ATTR_TRANSFER_HASH, ATTRIBUTE_FLAG_WRITABLE, esp_matter_octet_str(s_hash, 32), 32);
     attribute::create(c, ATTR_TRANSFER_META, ATTRIBUTE_FLAG_WRITABLE, esp_matter_octet_str(s_meta, 6), 6);
-    attribute::create(c, ATTR_FRAME_CHUNK, ATTRIBUTE_FLAG_WRITABLE, esp_matter_octet_str(s_frame, 1100), 1100);
+    attribute::create(c, ATTR_FRAME_CHUNK, ATTRIBUTE_FLAG_WRITABLE, esp_matter_long_octet_str(s_frame, 1100), 1100);
     attribute::create(c, ATTR_STATUS, ATTRIBUTE_FLAG_NONE, esp_matter_enum8(0));
     attribute::create(c, ATTR_PLAY_CMD, ATTRIBUTE_FLAG_WRITABLE, esp_matter_octet_str(s_cmd, 1), 1);
     attribute::create(c, ATTR_ACTIVE, ATTRIBUTE_FLAG_NONE, esp_matter_octet_str(s_active, 32), 32);
