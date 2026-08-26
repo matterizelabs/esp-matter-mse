@@ -1,8 +1,8 @@
-# firmware/main/partitions.csv
+# firmware/partitions.csv
 # Name,     Type, SubType, Offset,   Size
-nvs,        data, nvs,     0x9000,   0x4000
-otadata,    data, ota,     0xD000,   0x2000
-phy_init,   data, phy,     0xF000,   0x1000
-fctry,      data, nvs,     0x10000,  0x6000
+nvs,        data, nvs,     0x9000,   0xC000
+otadata,    data, ota,     0x15000,  0x2000
+phy_init,   data, phy,     0x17000,  0x1000
+fctry,      data, nvs,     0x18000,  0x6000
 factory,    app,  factory, 0x20000,  0x1C0000
 anim_cache, data, fat,     0x1E0000, 0xC0000
