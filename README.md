@@ -109,6 +109,31 @@ Common options: `--color RRGGBB`, `--seconds`, `--fps` (default 30), `--node-id`
 `--prefix` (default `./chip-tool`; use `ct` when piping to the chiptool host). The emitted
 lines (minus the prefix) can also be pasted into `chip-tool interactive start`.
 
+## chip-tool reference
+
+Commands below assume `ct` is the chip-tool alias, the device is **node `1`, endpoint `1`**.
+
+Animation cluster (`0x1618FC01`, `any` commands):
+
+```bash
+ct any read-by-id 0x1618FC01 0x0008 1 1            # read transfer status
+ct any write-by-id 0x1618FC01 0x0009 hex:01 1 1    # PLAY
+ct any write-by-id 0x1618FC01 0x0009 hex:02 1 1    # STOP
+ct any write-by-id 0x1618FC01 0x0009 hex:03 1 1    # CLEAR_CACHE
+```
+
+Transfer status (`0x0008`): `0` idle, `1` announced, `2` receiving, `4` playing, `5` error.
+
+Standard light clusters (interactive control):
+
+```bash
+ct onoff on 1 1
+ct onoff off 1 1
+ct levelcontrol move-to-level 128 0 0 0 1 1                              # brightness 50%
+ct colorcontrol move-to-hue-and-saturation 200 100 0 0 0 1 1              # hue 200°, sat 100%
+ct colorcontrol move-to-color-temperature 250 0 0 0 1 1                   # 250 mireds (≈4000K)
+```
+
 ## Wire contract
 
 `shared/wire_contract.json` is the single source of truth for the cluster ID, attribute IDs,
