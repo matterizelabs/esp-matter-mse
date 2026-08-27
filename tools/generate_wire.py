@@ -3,7 +3,7 @@
 
 Single source of truth for the animation wire protocol (cluster/attribute IDs,
 chunk/meta byte layout, max chunk size) shared between the ESP32 firmware and
-the `lottie2matter` tool.
+the companion Python tool (tools/effects.py).
 
 Outputs:
   components/animation/include/anim_protocol.h   (C)

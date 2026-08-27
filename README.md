@@ -94,7 +94,7 @@ Generates a procedural LED effect as a paste-ready sequence of `chip-tool any wr
 commands. Available effects (`uv run python effects.py --help`): `solid`, `chase`, `comet`,
 `pulse`, `rainbow`, `sparkle`, `wipe`, `strobe`, `fire` - each with `--color`, `--speed`,
 `--seconds`, etc. The same lines (minus the `./chip-tool` prefix) can be pasted into
-`chip-tool interactive start`. The old Lottie renderer lives on the `lottie-renderer` branch.
+`chip-tool interactive start`.
 
 ## Wire contract
 
