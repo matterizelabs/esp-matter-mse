@@ -87,14 +87,27 @@ Hardware config is in `main/Kconfig.projbuild` (defaults):
 
 ```bash
 cd tools
-uv run python effects.py chase --color ff0000 --speed 15 --node-id 1 > /tmp/anim.sh
+uv run python effects.py <effect> [options] --node-id 1 > /tmp/anim.sh
 ```
 
 Generates a procedural LED effect as a paste-ready sequence of `chip-tool any write-by-id`
-commands. Available effects (`uv run python effects.py --help`): `solid`, `chase`, `comet`,
-`pulse`, `rainbow`, `sparkle`, `wipe`, `strobe`, `fire` - each with `--color`, `--speed`,
-`--seconds`, etc. The same lines (minus the `./chip-tool` prefix) can be pasted into
-`chip-tool interactive start`.
+commands (hash → meta → chunks → play). Run each as `uv run python effects.py ...`:
+
+| Effect | Example |
+|---|---|
+| `solid` | `effects.py solid --color ff8800 --seconds 2` |
+| `chase` | `effects.py chase --color ff0000 --speed 15 --size 1 --tail 4` |
+| `comet` | `effects.py comet --color 00aaff --speed 10 --tail 8` |
+| `pulse` | `effects.py pulse --color ff8800 --period 2` |
+| `rainbow` | `effects.py rainbow --seconds 6` (add `--spatial` for a gradient) |
+| `sparkle` | `effects.py sparkle --color ffffff --density 0.3 --seed 7` |
+| `wipe` | `effects.py wipe --color 00aaff --direction ltr` |
+| `strobe` | `effects.py strobe --color ffffff --rate 4` |
+| `fire` | `effects.py fire --seed 3` |
+
+Common options: `--color RRGGBB`, `--seconds`, `--fps` (default 30), `--node-id` (default 1),
+`--prefix` (default `./chip-tool`; use `ct` when piping to the chiptool host). The emitted
+lines (minus the prefix) can also be pasted into `chip-tool interactive start`.
 
 ## Wire contract
 
