@@ -1,9 +1,10 @@
 # Matter WS2812 Animation Light
 
-A Matter **extended color light** on ESP32 that plays Lottie-sourced animations on a
-**48-LED (8×6) WS2812 matrix**. The device never parses Lottie: a companion tool renders
-Lottie into raw RGB frames, which are streamed to the device over a **custom Matter vendor
-cluster** (`0x1618FC01`), cached in flash, and played back at 30 fps.
+A Matter **extended color light** on ESP32 that plays LED effects on a
+**48-LED (8×6) WS2812 matrix**. A companion tool generates procedural effects as raw RGB
+frames, which are streamed to the device over a **custom Matter vendor cluster**
+(`0x1618FC01`), cached in flash, and played back at 30 fps. Interactive control (on/off,
+brightness, color) comes from the standard Matter light clusters.
 
 - **Vendor / Product:** Matterize Labs `0x1618` / `0x0001`
 - **Target:** ESP32 (classic, no PSRAM), flashed via `/dev/ttyUSB0`
@@ -12,8 +13,8 @@ cluster** (`0x1618FC01`), cached in flash, and played back at 30 fps.
 ## How it works
 
 ```
-Lottie (.lottie/.json)
-   └─ tools/lottie2matter.py   render → 8×6 RGB frames → SHA-256 + hex chunks
+LED effect (solid / chase / rainbow / ...)
+   └─ tools/effects.py   generate → 8×6 RGB frames → SHA-256 + hex chunks
         └─ chip-tool write-by-id (custom cluster 0x1618FC01)
              └─ ESP32: RAM jitter buffer → 30 fps playback → RMT → WS2812
                   └─ background flash cache (5 slots, LRU)
@@ -42,8 +43,8 @@ shared/
 └── wire_contract.json    single source of truth for the wire protocol
 tools/
 ├── generate_wire.py      wire_contract.json → anim_protocol.h + protocol.py
-├── lottie2matter.py      Lottie → paste-ready chip-tool commands
-├── matter_anim/          loader / render (rlottie) / codec / cli
+├── effects.py            procedural LED effects → paste-ready chip-tool commands
+├── matter_anim/          effects / codec / cli / protocol
 ├── certs/                factory-partition (DAC/PAI/CD) tooling
 └── tests/                pytest suite (incl. wire-contract conformance)
 docs/
@@ -86,11 +87,14 @@ Hardware config is in `main/Kconfig.projbuild` (defaults):
 
 ```bash
 cd tools
-uv run python lottie2matter.py path/to/animation.lottie --node-id 1 > /tmp/anim.sh
+uv run python effects.py chase --color ff0000 --speed 15 --node-id 1 > /tmp/anim.sh
 ```
 
-Prints a paste-ready sequence of `chip-tool any write-by-id` commands. The same lines
-(minus the `./chip-tool` prefix) can be pasted into `chip-tool interactive start`.
+Generates a procedural LED effect as a paste-ready sequence of `chip-tool any write-by-id`
+commands. Available effects (`uv run python effects.py --help`): `solid`, `chase`, `comet`,
+`pulse`, `rainbow`, `sparkle`, `wipe`, `strobe`, `fire` - each with `--color`, `--speed`,
+`--seconds`, etc. The same lines (minus the `./chip-tool` prefix) can be pasted into
+`chip-tool interactive start`. The old Lottie renderer lives on the `lottie-renderer` branch.
 
 ## Wire contract
 
