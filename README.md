@@ -107,4 +107,20 @@ python3 tools/generate_wire.py
 
 Device credentials (CD + PAI + DAC + commissioning data) live in the `fctry` partition and
 are generated with `esp-matter-mfg-tool` - see `tools/certs/README.md`. Current dev material
-uses the test PAA / test CD key; onboarding: discriminator `2245`, passcode `89674523`.
+uses the test PAA / test CD key.
+
+Onboarding / setup:
+
+| | Value |
+|---|---|
+| Setup code (manual pairing code) | `2048-915-4736` |
+| QR code | `MT:UFEA08-E150QJ850Y10` |
+| Discriminator | `2245` |
+| Passcode | `89674523` |
+
+The `fctry` partition must be flashed separately (it is not written by `idf.py flash`):
+
+```bash
+BIN=tools/certs/out/1618_1/<uuid>/<uuid>-partition.bin
+esptool.py --port /dev/ttyUSB0 write_flash 0x18000 "$BIN"
+```
