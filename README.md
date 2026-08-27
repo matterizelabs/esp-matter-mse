@@ -77,7 +77,7 @@ Hardware config is in `main/Kconfig.projbuild` (defaults):
 
 | Option | Default |
 |---|---|
-| `CONFIG_WS2812_GPIO` | `5` |
+| `CONFIG_WS2812_GPIO` | `3` |
 | `CONFIG_MATRIX_WIDTH` / `_HEIGHT` | `8` / `6` |
 | `CONFIG_MATRIX_SERPENTINE` | `y` |
 | `CONFIG_ANIM_FPS` | `30` |

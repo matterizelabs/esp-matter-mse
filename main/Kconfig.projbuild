@@ -2,7 +2,7 @@
 menu "WS2812 Matrix"
     config WS2812_GPIO
         int "WS2812 data GPIO"
-        default 5
+        default 3
         range 0 39
     config MATRIX_WIDTH
         int "Matrix width"
