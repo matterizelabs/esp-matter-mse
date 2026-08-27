@@ -12,10 +12,12 @@ from matter_anim.protocol import (
 )
 
 def serpentine_chain_order(width, height, serpentine=True):
+    # physical wiring: column-major, starts top-right, snakes down then up each column
     order = []
-    for y in range(height):
-        row = range(width) if (not serpentine or y % 2 == 0) else range(width - 1, -1, -1)
-        for x in row:
+    for x in range(width - 1, -1, -1):
+        down = (not serpentine) or ((width - 1 - x) % 2 == 0)
+        col = range(height) if down else range(height - 1, -1, -1)
+        for y in col:
             order.append((x, y))
     return order
 

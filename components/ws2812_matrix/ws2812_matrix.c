@@ -7,7 +7,7 @@
 
 ws2812_matrix_handle_t ws2812_matrix_init(void) {
     led_strip_config_t cfg = { .strip_gpio_num = CONFIG_WS2812_GPIO, .max_leds = LED_COUNT };
-    led_strip_rmt_config_t rmt = { .resolution_hz = 10 * 1000 * 1000 };
+    led_strip_rmt_config_t rmt = { .resolution_hz = 5 * 1000 * 1000 };
     led_strip_handle_t strip = NULL;
     if (led_strip_new_rmt_device(&cfg, &rmt, &strip) != ESP_OK) return NULL;
     led_strip_clear(strip);

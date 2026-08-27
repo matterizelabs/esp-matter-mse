@@ -3,18 +3,19 @@ from matter_anim import codec
 
 def test_serpentine_2x3():
     # chain order for W=2,H=3 serpentine:
-    # row0 L->R: (0,0),(1,0) ; row1 R->L: (1,1),(0,1) ; row2 L->R: (0,2),(1,2)
-    assert codec.serpentine_chain_order(2, 3, True) == [(0,0),(1,0),(1,1),(0,1),(0,2),(1,2)]
+    # col1 (right) T->B: (1,0),(1,1),(1,2) ; col0 (left) B->T: (0,2),(0,1),(0,0)
+    assert codec.serpentine_chain_order(2, 3, True) == [(1,0),(1,1),(1,2),(0,2),(0,1),(0,0)]
 
 def test_linear_2x2():
-    assert codec.serpentine_chain_order(2, 2, False) == [(0,0),(1,0),(0,1),(1,1)]
+    # column-major, all columns top-to-bottom, right to left
+    assert codec.serpentine_chain_order(2, 2, False) == [(1,0),(1,1),(0,0),(0,1)]
 
 def test_frame_to_bytes_maps_chain_order():
     # frame_pixels[y][x] = (r,g,b)
     frame = [[(255,0,0),(0,255,0)],[(0,0,255),(255,255,255)]]
-    order = codec.serpentine_chain_order(2, 2, True)  # (0,0),(1,0),(1,1),(0,1)
+    order = codec.serpentine_chain_order(2, 2, True)  # (1,0),(1,1),(0,1),(0,0)
     out = codec.frame_to_bytes(frame, order)
-    assert out == bytes([255,0,0, 0,255,0, 255,255,255, 0,0,255])
+    assert out == bytes([0,255,0, 255,255,255, 0,0,255, 255,0,0])
 
 def test_encode_chunk_header():
     frames = [bytes(12)] * 2  # 2 frames x 12 bytes
