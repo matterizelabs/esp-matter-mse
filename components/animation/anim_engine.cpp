@@ -4,192 +4,451 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "freertos/semphr.h"
 #include "psa/crypto.h"
+#include <atomic>
 #include <string.h>
 
 #define TAG "anim_engine"
 #define LED_COUNT (CONFIG_MATRIX_WIDTH * CONFIG_MATRIX_HEIGHT)
 #define FRAME_BYTES (LED_COUNT * 3)
 #define RING_LEN 8
-#define TICK_MS (1000 / CONFIG_ANIM_FPS)
+#define WORK_Q_LEN 16
+#define CHUNK_POOL_LEN 8
+#define CHUNK_BUF_SZ 1100
+#define BITMAP_BYTES ((ANIM_MAX_FRAMES + 7) / 8)
 
+enum {
+    ANIM_STATUS_IDLE = 0,
+    ANIM_STATUS_ANNOUNCED = 1,
+    ANIM_STATUS_RECEIVING = 2,
+    ANIM_STATUS_READY = 4,   /* cached animation found */
+    ANIM_STATUS_PLAYING = 4,
+    ANIM_STATUS_ERROR = 5,
+};
+
+typedef enum { WORK_START = 1, WORK_META, WORK_CHUNK, WORK_PLAY, WORK_STOP, WORK_CLEAR } work_type_t;
+
+typedef struct {
+    uint8_t type;
+    uint16_t len;
+    int16_t pool_idx;
+    uint8_t payload[32];
+} work_item_t;
+
+/* ---- shared with chip thread ---- */
 static ws2812_matrix_handle_t s_matrix;
-static QueueHandle_t s_q;          /* queue of pointers into a static ring */
+static QueueHandle_t s_work_q;      /* work items, chip thread -> io task */
+static QueueHandle_t s_fill_q;      /* ring slot indices with fresh frames, io -> playback */
+static QueueHandle_t s_free_q;      /* ring slot indices available to write, playback -> io */
+static QueueHandle_t s_pool_q;      /* chunk buffer indices available to copy into */
+static SemaphoreHandle_t s_ring_mtx;   /* serializes ring push/pop/reset */
+static SemaphoreHandle_t s_stop_done;  /* ack from io task that STOP was processed */
 static uint8_t s_ring[RING_LEN][FRAME_BYTES];
-static uint32_t s_head = 0;        /* next write slot */
-static volatile uint8_t s_brightness = 100;
-static volatile bool s_running = false;
+static uint8_t s_pool[CHUNK_POOL_LEN][CHUNK_BUF_SZ];
+static std::atomic<uint8_t> s_brightness{100};
+static std::atomic<bool> s_running{false};
 
-static void playback_task(void *arg) {
-    while (true) {
-        if (s_running) {
-            void *slot = NULL;
-            if (xQueueReceive(s_q, &slot, pdMS_TO_TICKS(TICK_MS)) == pdTRUE) {
-                uint8_t *frame = (uint8_t *)slot;
-                /* apply master brightness in-place (copy to scratch) */
-                static uint8_t scratch[FRAME_BYTES];
-                for (int i = 0; i < FRAME_BYTES; i++) scratch[i] = frame[i] * s_brightness / 100;
-                ws2812_matrix_show_frame(s_matrix, scratch, FRAME_BYTES);
-            }
-        } else {
-            vTaskDelay(pdMS_TO_TICKS(TICK_MS));
-        }
+/* ---- transfer + playback state, owned by io task ---- */
+static int s_slot = -1;
+static bool s_cached_hit = false;
+static bool s_transfer = false;
+static uint8_t s_pending_hash[32];
+static uint16_t s_total = 0;
+static uint8_t s_fps = CONFIG_ANIM_FPS;
+static uint8_t s_loop = 1;
+static uint8_t s_bitmap[BITMAP_BYTES];
+static int s_cache_slot = -1;
+static uint16_t s_cache_idx = 0;
+static uint16_t s_cache_frames = 0;
+static uint8_t s_cache_fps = CONFIG_ANIM_FPS;
+static uint8_t s_last_status = 0xFF;
+
+extern uint16_t light_endpoint_id;
+
+/* ------------------------------------------------------------------------- */
+/* attribute reporting (io task context)                                      */
+/* ------------------------------------------------------------------------- */
+
+void anim_set_status(uint8_t status) {
+    if (status == s_last_status) return;   /* only report on change, not per chunk */
+    s_last_status = status;
+    ESP_LOGI(TAG, "transfer status -> %u", status);
+    esp_matter_attr_val_t val = esp_matter_enum8(status);
+    if (esp_matter::attribute::update(light_endpoint_id, anim::CLUSTER_ID, anim::ATTR_STATUS, &val) != ESP_OK) {
+        ESP_LOGE(TAG, "failed to update ATTR_STATUS");
     }
 }
 
-esp_err_t anim_engine_init(ws2812_matrix_handle_t m) {
-    s_matrix = m;
-    s_q = xQueueCreate(RING_LEN, sizeof(void *));
-    xTaskCreate(playback_task, "anim_play", 4096, NULL, 10, NULL);
-    return ESP_OK;
+static void set_active(const uint8_t *hash) {
+    esp_matter_attr_val_t val = esp_matter_octet_str((uint8_t *)hash, 32);
+    if (esp_matter::attribute::update(light_endpoint_id, anim::CLUSTER_ID, anim::ATTR_ACTIVE, &val) != ESP_OK) {
+        ESP_LOGE(TAG, "failed to update ATTR_ACTIVE");
+    }
+}
+
+static void report_cached(void) {
+    static uint8_t blobs[ANIM_SLOT_COUNT * 32];
+    memset(blobs, 0, sizeof(blobs));
+    for (int i = 0; i < ANIM_SLOT_COUNT; i++) anim_flash_get_slot_hash(i, blobs + i * 32, 32);
+    esp_matter_attr_val_t val = esp_matter_octet_str(blobs, sizeof(blobs));
+    if (esp_matter::attribute::update(light_endpoint_id, anim::CLUSTER_ID, anim::ATTR_CACHED, &val) != ESP_OK) {
+        ESP_LOGE(TAG, "failed to update ATTR_CACHED");
+    }
+}
+
+/* ------------------------------------------------------------------------- */
+/* ring buffer: io task is the single producer, playback task the consumer.   */
+/* A slot is owned by exactly one side at a time: free_q -> (write) ->        */
+/* fill_q -> (copy) -> free_q. The consumer copies and releases the slot      */
+/* inside the same critical section, so a slot can never be rewritten while   */
+/* the consumer still reads it (no torn frames).                              */
+/* ------------------------------------------------------------------------- */
+
+static bool ring_push(const uint8_t *frame) {
+    uint8_t idx;
+    xSemaphoreTake(s_ring_mtx, portMAX_DELAY);
+    bool ok = false;
+    if (xQueueReceive(s_free_q, &idx, 0) == pdTRUE) {
+        memcpy(s_ring[idx], frame, FRAME_BYTES);
+        xQueueSend(s_fill_q, &idx, 0);
+        ok = true;
+    }
+    xSemaphoreGive(s_ring_mtx);
+    return ok;
+}
+
+static void ring_reset(void) {
+    xSemaphoreTake(s_ring_mtx, portMAX_DELAY);
+    xQueueReset(s_fill_q);
+    xQueueReset(s_free_q);
+    for (uint8_t i = 0; i < RING_LEN; i++) xQueueSend(s_free_q, &i, 0);
+    xSemaphoreGive(s_ring_mtx);
 }
 
 bool anim_engine_push_frame(const uint8_t *chain_rgb, size_t len) {
     if (len != FRAME_BYTES) return false;
-    if (uxQueueSpacesAvailable(s_q) == 0) return false;  /* clean drop if full (no slot corruption) */
-    uint8_t *slot = s_ring[s_head % RING_LEN];
-    memcpy(slot, chain_rgb, FRAME_BYTES);
-    if (xQueueSend(s_q, &slot, 0) != pdTRUE) return false;
-    s_head++;
-    return true;
+    return ring_push(chain_rgb);
 }
-void anim_engine_set_brightness(uint8_t pct) { s_brightness = pct > 100 ? 100 : pct; }
-void anim_engine_stop(void) { s_running = false; }
-bool anim_engine_is_running(void) { return s_running; }
+
+static void playback_task(void *arg) {
+    static uint8_t scratch[FRAME_BYTES];
+    uint8_t idx;
+    for (;;) {
+        if (xQueueReceive(s_fill_q, &idx, portMAX_DELAY) != pdTRUE) continue;
+        xSemaphoreTake(s_ring_mtx, portMAX_DELAY);
+        uint8_t b = s_brightness.load(std::memory_order_relaxed);
+        for (int i = 0; i < FRAME_BYTES; i++) scratch[i] = (uint8_t)(s_ring[idx][i] * b / 100);
+        xQueueSend(s_free_q, &idx, 0);
+        xSemaphoreGive(s_ring_mtx);
+        ws2812_matrix_show_frame(s_matrix, scratch, FRAME_BYTES);
+    }
+}
 
 /* ------------------------------------------------------------------------- */
-/* Transfer state machine:                                                    */
+/* transfer state machine (io task)                                           */
 /*   TransferHash (announce) -> TransferMeta -> FrameChunk* -> PlayCmd        */
 /* ------------------------------------------------------------------------- */
 
-extern uint16_t light_endpoint_id;
+static bool bitmap_get(uint32_t fi) { return (s_bitmap[fi >> 3] & (1u << (fi & 7))) != 0; }
+static void bitmap_set(uint32_t fi) { s_bitmap[fi >> 3] |= (1u << (fi & 7)); }
 
-static int s_slot = -1;
-static uint32_t s_write_cursor = 0;
-static uint16_t s_total = 0;
-static uint8_t s_pending_hash[32];
-static psa_hash_operation_t s_hash_op = PSA_HASH_OPERATION_INIT;
-static bool s_announced = false;
-static bool s_cached_hit = false;
-static int s_cache_slot = -1;
-static uint16_t s_cache_frames = 0;
-
-static void cache_fill_task(void *arg) {
-    uint32_t idx = 0;
-    for (int i = 0; i < RING_LEN && s_running; i++) {   /* prime the ring buffer */
-        uint8_t frame[FRAME_BYTES];
-        if (anim_flash_read_frame(s_cache_slot, idx, frame, FRAME_BYTES) != ESP_OK) break;
-        anim_engine_push_frame(frame, FRAME_BYTES);
-        idx = (idx + 1) % s_cache_frames;
-    }
-    while (s_running) {
-        vTaskDelay(pdMS_TO_TICKS(TICK_MS));
-        uint8_t frame[FRAME_BYTES];
-        if (anim_flash_read_frame(s_cache_slot, idx, frame, FRAME_BYTES) == ESP_OK)
-            anim_engine_push_frame(frame, FRAME_BYTES);
-        idx = (idx + 1) % s_cache_frames;
-    }
-    vTaskDelete(NULL);
+static void fail_transfer(void) {
+    if (s_transfer && s_slot >= 0) anim_flash_abort(s_slot);
+    s_transfer = false;
+    s_cached_hit = false;
+    s_slot = -1;
+    s_total = 0;
+    report_cached();
+    anim_set_status(ANIM_STATUS_ERROR);
 }
 
-void anim_set_status(uint8_t status) {
-    ESP_LOGI(TAG, "transfer status -> %u", status);
-    esp_matter_attr_val_t val = esp_matter_enum8(status);
-    esp_err_t err = esp_matter::attribute::update(light_endpoint_id, anim::CLUSTER_ID, anim::ATTR_STATUS, &val);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "failed to update ATTR_STATUS: %d", err);
-    }
+static void stop_playback(void) {
+    s_running = false;
+    s_cache_slot = -1;
+    s_cache_idx = 0;
+    ring_reset();   /* drop frames still queued so nothing repaints after the clear */
+    ws2812_matrix_clear(s_matrix);
+    uint8_t zero[32] = {0};
+    set_active(zero);
 }
 
-void anim_handle_transfer_hash(const uint8_t *hash, size_t len) {
-    if (len != 32) return;
+static void handle_start(const uint8_t *hash) {
     memcpy(s_pending_hash, hash, 32);
-    s_slot = anim_flash_find(hash);
-    s_cached_hit = (s_slot >= 0);
-    anim_set_status(s_slot >= 0 ? 4 /*READY*/ : 1 /*ANNOUNCED*/);
-    if (s_slot < 0) {
-        s_slot = anim_flash_alloc_slot();
-        anim_flash_erase(s_slot);
-        s_write_cursor = 0;
+    int found = anim_flash_find(hash);
+    if (found >= 0) {
+        /* already cached: playback from flash, ignore any re-streamed chunks */
+        s_slot = found;
+        s_cached_hit = true;
+        s_transfer = false;
+        anim_set_status(ANIM_STATUS_READY);
+        return;
     }
-    psa_crypto_init();
-    psa_hash_abort(&s_hash_op); /* safe no-op when already inactive */
-    psa_hash_setup(&s_hash_op, PSA_ALG_SHA_256);
-    s_announced = true;
+    /* miss: stop current playback first so its slot can be reclaimed */
+    stop_playback();
+    s_cached_hit = false;
+    s_slot = anim_flash_alloc_slot();
+    if (s_slot < 0) {
+        anim_set_status(ANIM_STATUS_ERROR);
+        return;
+    }
+    s_transfer = true;
+    s_total = 0;
+    s_fps = CONFIG_ANIM_FPS;
+    s_loop = 1;
+    memset(s_bitmap, 0, sizeof(s_bitmap));
+    report_cached();
+    anim_set_status(ANIM_STATUS_ANNOUNCED);
 }
 
-void anim_handle_transfer_meta(const uint8_t *meta, size_t len) {
-    if (len != 6) { anim_set_status(5 /*ERROR*/); return; }
-    uint16_t total_frames = (uint16_t)(meta[0] | (meta[1] << 8));
+static void handle_meta(const uint8_t *meta, size_t len) {
+    if (len != 6) { fail_transfer(); return; }
+    uint16_t total = (uint16_t)(meta[0] | (meta[1] << 8));
     uint8_t fps = meta[2];
     uint8_t loop = meta[3];
     uint8_t width = meta[4];
     uint8_t height = meta[5];
-    if (width != CONFIG_MATRIX_WIDTH || height != CONFIG_MATRIX_HEIGHT) { anim_set_status(5 /*ERROR*/); return; }
-    s_total = total_frames;
-    ESP_LOGI(TAG, "transfer meta: %u frames @ %u fps, loop=%u, %ux%u", total_frames, fps, loop, width, height);
+    if (width != CONFIG_MATRIX_WIDTH || height != CONFIG_MATRIX_HEIGHT) { fail_transfer(); return; }
+    if (total == 0 || total > ANIM_MAX_FRAMES) { fail_transfer(); return; }
+    if ((uint32_t)total * FRAME_BYTES > ANIM_SLOT_SIZE) { fail_transfer(); return; }
+    s_total = total;
+    s_fps = (fps >= 1 && fps <= 60) ? fps : CONFIG_ANIM_FPS;
+    s_loop = loop ? 1 : 0;
+    ESP_LOGI(TAG, "transfer meta: %u frames @ %u fps, loop=%u, %ux%u", total, s_fps, s_loop, width, height);
+}
+
+static void handle_chunk(const uint8_t *data, size_t len) {
+    anim_chunk_hdr_t hdr;
+    if (!anim_parse_chunk_header(data, len, &hdr)) return;
+    if (hdr.width != CONFIG_MATRIX_WIDTH || hdr.height != CONFIG_MATRIX_HEIGHT) { fail_transfer(); return; }
+    if (len < 6 + (size_t)hdr.count * FRAME_BYTES) { fail_transfer(); return; }
+    if (!s_transfer) return;   /* cached-hit: streamed chunks are ignored, nothing is rewritten */
+    const uint8_t *px = data + 6;
+    for (int k = 0; k < hdr.count; k++) {
+        uint32_t fi = (uint32_t)hdr.frame_index + k;
+        if (fi >= s_total) { fail_transfer(); return; }
+        if (bitmap_get(fi)) continue;   /* retransmitted frame: skip write/hash/push */
+        bitmap_set(fi);
+        const uint8_t *frame = px + k * FRAME_BYTES;
+        anim_engine_push_frame(frame, FRAME_BYTES);   /* preview immediately (drop if ring full) */
+        if (anim_flash_write(s_slot, fi * FRAME_BYTES, frame, FRAME_BYTES) != ESP_OK) {
+            fail_transfer();
+            return;
+        }
+    }
+    anim_set_status(ANIM_STATUS_RECEIVING);   /* deduped: reported only on first chunk */
+}
+
+/* hash of the frames as persisted in flash must equal the announced hash;
+ * works for out-of-order and duplicated frames, and catches torn slots */
+static bool verify_slot(int slot, uint16_t total, const uint8_t *expect) {
+    static uint8_t fbuf[FRAME_BYTES];
+    uint8_t digest[32];
+    size_t dlen = 0;
+    psa_crypto_init();
+    psa_hash_operation_t op = PSA_HASH_OPERATION_INIT;
+    if (psa_hash_setup(&op, PSA_ALG_SHA_256) != PSA_SUCCESS) return false;
+    for (uint16_t i = 0; i < total; i++) {
+        if (anim_flash_read_frame(slot, i, fbuf, sizeof(fbuf)) != ESP_OK ||
+            psa_hash_update(&op, fbuf, FRAME_BYTES) != PSA_SUCCESS) {
+            psa_hash_abort(&op);
+            return false;
+        }
+    }
+    psa_hash_finish(&op, digest, sizeof(digest), &dlen);
+    return dlen == 32 && memcmp(digest, expect, 32) == 0;
+}
+
+static void handle_play(void) {
+    if (s_cached_hit) {
+        uint16_t frames = 0;
+        uint8_t fps = 0, loop = 0;
+        if (s_slot < 0 || anim_flash_get_slot_info(s_slot, &frames, &fps, &loop) != ESP_OK || frames == 0) {
+            anim_set_status(ANIM_STATUS_ERROR);
+            return;
+        }
+        /* verify persisted data still matches the slot hash; catches slots torn
+         * by a power loss during an earlier interrupted transfer */
+        if (!verify_slot(s_slot, frames, s_pending_hash)) {
+            anim_set_status(ANIM_STATUS_ERROR);
+            return;
+        }
+        ring_reset();
+        s_cache_slot = s_slot;
+        s_cache_frames = frames;
+        s_cache_fps = (fps >= 1 && fps <= 60) ? fps : CONFIG_ANIM_FPS;
+        s_cache_idx = 0;
+        s_running = true;
+        set_active(s_pending_hash);
+        anim_set_status(ANIM_STATUS_PLAYING);
+        return;
+    }
+    if (!s_transfer || s_slot < 0 || s_total == 0) { fail_transfer(); return; }
+    if (!verify_slot(s_slot, s_total, s_pending_hash)) { fail_transfer(); return; }
+    if (anim_flash_commit(s_slot, s_pending_hash, s_total, s_fps, s_loop) != ESP_OK) { fail_transfer(); return; }
+    s_transfer = false;
+    s_cached_hit = false;
+    ring_reset();
+    s_cache_slot = s_slot;
+    s_cache_frames = s_total;
+    s_cache_fps = s_fps;
+    s_cache_idx = 0;
+    s_running = true;
+    set_active(s_pending_hash);
+    report_cached();
+    anim_set_status(ANIM_STATUS_PLAYING);
+}
+
+static void handle_stop(void) {
+    stop_playback();
+    anim_set_status(ANIM_STATUS_IDLE);
+    xSemaphoreGive(s_stop_done);
+}
+
+static void handle_clear(void) {
+    stop_playback();
+    anim_flash_clear_all();
+    report_cached();
+    anim_set_status(ANIM_STATUS_IDLE);
+}
+
+static void push_cache_frame(void) {
+    if (!s_running || s_cache_slot < 0) return;
+    static uint8_t frame[FRAME_BYTES];
+    if (anim_flash_read_frame(s_cache_slot, s_cache_idx, frame, sizeof(frame)) != ESP_OK) {
+        stop_playback();
+        anim_set_status(ANIM_STATUS_ERROR);
+        return;
+    }
+    anim_engine_push_frame(frame, FRAME_BYTES);
+    s_cache_idx = (s_cache_idx + 1) % s_cache_frames;
+}
+
+/* sole producer of ring frames and sole flash user; keeps all flash latency
+ * (sector erase, commit) off the Matter thread */
+static void io_task(void *arg) {
+    psa_crypto_init();
+    work_item_t item;
+    for (;;) {
+        TickType_t wait = (s_running && s_cache_slot >= 0) ? pdMS_TO_TICKS(1000 / s_cache_fps) : portMAX_DELAY;
+        if (xQueueReceive(s_work_q, &item, wait) == pdTRUE) {
+            switch (item.type) {
+            case WORK_START:
+                handle_start(item.payload);
+                break;
+            case WORK_META:
+                handle_meta(item.payload, item.len);
+                break;
+            case WORK_CHUNK: {
+                uint8_t pidx = (uint8_t)item.pool_idx;
+                if (pidx < CHUNK_POOL_LEN) {
+                    handle_chunk(s_pool[pidx], item.len);
+                    xQueueSend(s_pool_q, &pidx, 0);
+                }
+                break;
+            }
+            case WORK_PLAY:
+                handle_play();
+                break;
+            case WORK_STOP:
+                handle_stop();
+                break;
+            case WORK_CLEAR:
+                handle_clear();
+                break;
+            default:
+                break;
+            }
+        } else {
+            push_cache_frame();
+        }
+    }
+}
+
+/* ------------------------------------------------------------------------- */
+/* chip-thread entry points: validate and queue, never touch flash or ring    */
+/* ------------------------------------------------------------------------- */
+
+static bool queue_item(uint8_t type, const void *payload, size_t len) {
+    work_item_t it;
+    memset(&it, 0, sizeof(it));
+    it.type = type;
+    it.len = len;
+    if (payload && len) memcpy(it.payload, payload, len);
+    return xQueueSend(s_work_q, &it, pdMS_TO_TICKS(50)) == pdTRUE;
+}
+
+void anim_handle_transfer_hash(const uint8_t *hash, size_t len) {
+    if (len != 32) return;
+    queue_item(WORK_START, hash, 32);
+}
+
+void anim_handle_transfer_meta(const uint8_t *meta, size_t len) {
+    if (len != 6) return;
+    queue_item(WORK_META, meta, len);
 }
 
 void anim_handle_frame_chunk(const uint8_t *data, size_t len) {
     anim_chunk_hdr_t hdr;
     if (!anim_parse_chunk_header(data, len, &hdr)) return;
-    if (hdr.width != CONFIG_MATRIX_WIDTH || hdr.height != CONFIG_MATRIX_HEIGHT) { anim_set_status(5 /*ERROR*/); return; }
-    size_t fsz = hdr.width * hdr.height * 3;
-    if (len < 6 + (size_t)hdr.count * fsz) { anim_set_status(5 /*ERROR*/); return; }
-    const uint8_t *px = data + 6;
-    for (int k = 0; k < hdr.count; k++) {
-        const uint8_t *frame = px + k * fsz;
-        anim_engine_push_frame(frame, fsz);          /* play immediately */
-        if (s_slot >= 0) {                            /* persist in background */
-            anim_flash_write(s_slot, (uint32_t)(hdr.frame_index + k) * fsz, frame, fsz);
-            s_write_cursor += fsz;
-        }
-        psa_hash_update(&s_hash_op, frame, fsz);
+    if (hdr.width != CONFIG_MATRIX_WIDTH || hdr.height != CONFIG_MATRIX_HEIGHT) return;
+    if (len < 6 + (size_t)hdr.count * FRAME_BYTES || len > CHUNK_BUF_SZ) return;
+    uint8_t pidx;
+    if (xQueueReceive(s_pool_q, &pidx, 0) != pdTRUE) {
+        ESP_LOGW(TAG, "chunk pool exhausted, dropping chunk");
+        return;
     }
-    anim_set_status(2 /*RECEIVING*/);
+    memcpy(s_pool[pidx], data, len);
+    work_item_t it;
+    memset(&it, 0, sizeof(it));
+    it.type = WORK_CHUNK;
+    it.len = len;
+    it.pool_idx = pidx;
+    if (xQueueSend(s_work_q, &it, pdMS_TO_TICKS(50)) != pdTRUE) {
+        xQueueSend(s_pool_q, &pidx, 0);
+    }
 }
 
 void anim_handle_play_cmd(uint8_t cmd) {
-    if (cmd == 1) { /* PLAY */
-        if (s_cached_hit) { /* hash already in flash: play from cache, no re-stream */
-            uint8_t fps = CONFIG_ANIM_FPS;
-            uint8_t loop = 1;
-            if (anim_flash_get_slot_info(s_slot, &s_cache_frames, &fps, &loop) != ESP_OK || s_cache_frames == 0) {
-                anim_set_status(5 /*ERROR*/);
-                return;
-            }
-            xQueueReset(s_q);                    /* discard the stale streamed frames already in the ring */
-            s_cache_slot = s_slot;
-            s_running = true;
-            xTaskCreate(cache_fill_task, "anim_cache_fill", 4096, NULL, 9, NULL);
-            anim_set_status(4 /*PLAYING*/);
-            return;
-        }
-        /* miss: verify streamed hash, commit slot, start loop */
-        if (!s_announced) { anim_set_status(5 /*ERROR*/); return; }
-        uint8_t digest[32] = {0};
-        size_t digest_len = 0;
-        if (psa_hash_finish(&s_hash_op, digest, sizeof(digest), &digest_len) != PSA_SUCCESS || digest_len != 32) {
-            s_announced = false;
-            anim_set_status(5 /*ERROR*/);
-            return;
-        }
-        if (memcmp(digest, s_pending_hash, 32) != 0) {
-            s_announced = false;
-            anim_set_status(5 /*ERROR*/);
-            return;
-        }
-        if (s_slot >= 0) anim_flash_commit(s_slot, s_pending_hash, s_total, CONFIG_ANIM_FPS, 1);
-        s_announced = false;
-        xQueueReset(s_q);                    /* discard the stale streamed frames already in the ring */
-        s_cache_slot = s_slot;
-        if (s_total == 0) { anim_set_status(5); return; }
-        s_cache_frames = s_total;
-        s_running = true;
-        xTaskCreate(cache_fill_task, "anim_cache_fill", 4096, NULL, 9, NULL);
-        anim_set_status(4 /*PLAYING*/);
-    } else if (cmd == 2) { /* STOP */
-        s_running = false;
-        anim_set_status(0 /*IDLE*/);
+    if (cmd == 1) {
+        queue_item(WORK_PLAY, NULL, 0);
+    } else if (cmd == 2) {
+        queue_item(WORK_STOP, NULL, 0);
+    } else if (cmd == 3) {
+        queue_item(WORK_CLEAR, NULL, 0);
     }
 }
+
+/* ------------------------------------------------------------------------- */
+/* public control                                                             */
+/* ------------------------------------------------------------------------- */
+
+esp_err_t anim_engine_init(ws2812_matrix_handle_t m) {
+    s_matrix = m;
+    s_work_q = xQueueCreate(WORK_Q_LEN, sizeof(work_item_t));
+    s_fill_q = xQueueCreate(RING_LEN, sizeof(uint8_t));
+    s_free_q = xQueueCreate(RING_LEN, sizeof(uint8_t));
+    s_pool_q = xQueueCreate(CHUNK_POOL_LEN, sizeof(uint8_t));
+    s_ring_mtx = xSemaphoreCreateMutex();
+    s_stop_done = xSemaphoreCreateBinary();
+    uint8_t i;
+    for (i = 0; i < RING_LEN; i++) xQueueSend(s_free_q, &i, 0);
+    for (i = 0; i < CHUNK_POOL_LEN; i++) xQueueSend(s_pool_q, &i, 0);
+    xTaskCreate(playback_task, "anim_play", 4096, NULL, 10, NULL);
+    xTaskCreate(io_task, "anim_io", 8192, NULL, 9, NULL);
+    return ESP_OK;
+}
+
+void anim_engine_set_brightness(uint8_t pct) { s_brightness.store(pct > 100 ? 100 : pct, std::memory_order_relaxed); }
+
+void anim_engine_stop(void) {
+    while (xSemaphoreTake(s_stop_done, 0) == pdTRUE) { /* drain stale acks */
+    }
+    work_item_t it;
+    memset(&it, 0, sizeof(it));
+    it.type = WORK_STOP;
+    if (xQueueSend(s_work_q, &it, pdMS_TO_TICKS(100)) != pdTRUE) return;
+    xSemaphoreTake(s_stop_done, pdMS_TO_TICKS(1000));
+}
+
+bool anim_engine_is_running(void) { return s_running.load(std::memory_order_relaxed); }

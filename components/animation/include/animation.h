@@ -24,11 +24,13 @@ bool anim_parse_chunk_header(const uint8_t *buf, size_t len, anim_chunk_hdr_t *o
 esp_err_t anim_flash_init(void);
 int  anim_flash_find(const uint8_t hash[32]);
 int  anim_flash_alloc_slot(void);
-esp_err_t anim_flash_erase(int slot);
 esp_err_t anim_flash_write(int slot, uint32_t offset, const uint8_t *data, size_t len);
 esp_err_t anim_flash_commit(int slot, const uint8_t hash[32], uint16_t total_frames, uint8_t fps, uint8_t loop);
+esp_err_t anim_flash_abort(int slot);
+esp_err_t anim_flash_clear_all(void);
 esp_err_t anim_flash_read_frame(int slot, uint32_t frame_index, uint8_t *out, size_t out_len);
 esp_err_t anim_flash_get_slot_info(int slot, uint16_t *total_frames, uint8_t *fps, uint8_t *loop);
+esp_err_t anim_flash_get_slot_hash(int slot, uint8_t *out, size_t len);
 
 esp_err_t anim_engine_init(ws2812_matrix_handle_t m);
 bool anim_engine_push_frame(const uint8_t *chain_rgb, size_t len);

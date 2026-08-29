@@ -61,6 +61,11 @@ def main(argv=None):
         print("error: effect produced no frames", file=sys.stderr)
         return 2
 
+    slot_bytes = len(frames) * args.width * args.height * 3
+    if slot_bytes > 128 * 1024:
+        print(f"error: {len(frames)} frames = {slot_bytes} bytes exceeds 128 KiB cache slot", file=sys.stderr)
+        return 2
+
     h = codec.animation_hash(frames)
     meta = codec.encode_meta(len(frames), args.fps, 1, args.width, args.height)
     chunks = codec.pack_chunks(frames, args.width, args.height, args.fps)
