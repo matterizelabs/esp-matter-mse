@@ -1,6 +1,7 @@
 #include "stream_engine.h"
 #include "esp_partition.h"
 #include "esp_log.h"
+#include "ws2812_matrix.h"
 #include <string.h>
 
 #define TAG "stream_flash"
@@ -27,7 +28,9 @@ static uint32_t s_sector_erased[STREAM_SLOT_COUNT];
  * so a half-overwritten slot can never be reported as cached */
 static uint8_t s_busy[STREAM_SLOT_COUNT];
 
-/* all access is serialized by the single stream io task; no locking required */
+/* s_meta/s_busy/s_sector_erased are owned by the single stream io task. SPI flash
+ * access is additionally gated by ws2812_matrix_lock so a flash op never overlaps the
+ * blocking RMT refresh, which would starve the non-IRAM RMT ISR on ESP32 classic. */
 
 static esp_err_t persist_meta(void) {
     esp_err_t err = esp_partition_erase_range(s_part, 0, META_SIZE);
@@ -78,7 +81,10 @@ esp_err_t stream_flash_abort(int slot) {
     if (slot < 0 || slot >= STREAM_SLOT_COUNT) return ESP_ERR_INVALID_ARG;
     s_busy[slot] = 0;
     s_meta.slots[slot].state = 0;
-    return persist_meta();
+    ws2812_matrix_lock();
+    esp_err_t err = persist_meta();
+    ws2812_matrix_unlock();
+    return err;
 }
 
 esp_err_t stream_flash_clear_all(void) {
@@ -86,7 +92,10 @@ esp_err_t stream_flash_clear_all(void) {
         s_busy[i] = 0;
         s_meta.slots[i].state = 0;
     }
-    return persist_meta();
+    ws2812_matrix_lock();
+    esp_err_t err = persist_meta();
+    ws2812_matrix_unlock();
+    return err;
 }
 
 esp_err_t stream_flash_commit(int slot, const uint8_t hash[32], uint16_t total_frames, uint8_t fps, uint8_t loop) {
@@ -98,7 +107,10 @@ esp_err_t stream_flash_commit(int slot, const uint8_t hash[32], uint16_t total_f
     s_meta.slots[slot].state = 1;
     s_meta.slots[slot].lru = ++s_tick;
     s_busy[slot] = 0;
-    return persist_meta();
+    ws2812_matrix_lock();
+    esp_err_t err = persist_meta();
+    ws2812_matrix_unlock();
+    return err;
 }
 
 esp_err_t stream_flash_write(int slot, uint32_t offset, const uint8_t *data, size_t len) {
@@ -107,21 +119,30 @@ esp_err_t stream_flash_write(int slot, uint32_t offset, const uint8_t *data, siz
     uint32_t base = DATA_OFFSET + (uint32_t)slot * STREAM_SLOT_SIZE;
     uint32_t s0 = offset / SECTOR_SIZE;
     uint32_t s1 = (offset + len - 1) / SECTOR_SIZE;
+    ws2812_matrix_lock();
     for (uint32_t s = s0; s <= s1; s++) {
         if (!(s_sector_erased[slot] & (1u << s))) {
             esp_err_t err = esp_partition_erase_range(s_part, base + s * SECTOR_SIZE, SECTOR_SIZE);
-            if (err != ESP_OK) return err;
+            if (err != ESP_OK) {
+                ws2812_matrix_unlock();
+                return err;
+            }
             s_sector_erased[slot] |= (1u << s);
         }
     }
-    return esp_partition_write(s_part, base + offset, data, len);
+    esp_err_t err = esp_partition_write(s_part, base + offset, data, len);
+    ws2812_matrix_unlock();
+    return err;
 }
 
 esp_err_t stream_flash_read_frame(int slot, uint32_t frame_index, uint8_t *out, size_t out_len) {
     if (slot < 0 || slot >= STREAM_SLOT_COUNT || !out || out_len < FRAME_BYTES) return ESP_ERR_INVALID_SIZE;
     if ((uint64_t)(frame_index + 1) * FRAME_BYTES > STREAM_SLOT_SIZE) return ESP_ERR_INVALID_ARG;
-    return esp_partition_read(s_part, DATA_OFFSET + (uint32_t)slot * STREAM_SLOT_SIZE + frame_index * FRAME_BYTES, out,
+    ws2812_matrix_lock();
+    esp_err_t err = esp_partition_read(s_part, DATA_OFFSET + (uint32_t)slot * STREAM_SLOT_SIZE + frame_index * FRAME_BYTES, out,
                               FRAME_BYTES);
+    ws2812_matrix_unlock();
+    return err;
 }
 
 esp_err_t stream_flash_get_slot_info(int slot, uint16_t *total_frames, uint8_t *fps, uint8_t *loop) {
