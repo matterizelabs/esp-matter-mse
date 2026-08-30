@@ -6,6 +6,8 @@ reference: it defines a custom cluster (`0x1618FC01`, Matterize vendor ID `0x161
 raw byte payloads to an ESP32, verifies them with SHA-256, caches them in flash across 5 LRU
 slots, and replays them on demand. The demo sink is a 48-LED (8x6) WS2812 matrix light.
 
+All commands below use `ct` as the chip-tool alias: `alias ct=./chip-tool`.
+
 ## Quick start
 
 ### 1. Build and flash
@@ -30,14 +32,14 @@ esptool.py --port /dev/ttyUSB0 write_flash 0x18000 "$BIN"
 ### 2. Commission
 
 ```bash
-chip-tool pairing code 1 MT:UFEA08-E150QJ850Y10   # or: pairing onnetwork 1 89674523 2245
+ct pairing code 1 MT:UFEA08-E150QJ850Y10   # or: ct pairing onnetwork 1 89674523 2245
 ```
 
 ### 3. Stream and play
 
 ```bash
 cd tools
-uv run python effects.py chase --leds 2 --seconds 0.1 --color ff8800 > /tmp/chase.sh
+uv run python effects.py chase --leds 2 --seconds 0.1 --color ff8800 --prefix ct > /tmp/chase.sh
 sh /tmp/chase.sh
 ct any read-by-id 0x1618FC01 0x0008 1 1   # 4 = playing
 ```
@@ -45,10 +47,10 @@ ct any read-by-id 0x1618FC01 0x0008 1 1   # 4 = playing
 `effects.py` emits `hash -> meta -> chunks -> play` writes. Sample:
 
 ```text
-./chip-tool any write-by-id 0x1618FC01 0x0005 hex:9521b8e4...2429b 1 1    # announce (sha256)
-./chip-tool any write-by-id 0x1618FC01 0x0006 hex:06001e010806 1 1        # 6 frames @30fps, 8x6
-./chip-tool any write-by-id 0x1618FC01 0x0007 hex:00000608061eff8800... 1 1   # chunk
-./chip-tool any write-by-id 0x1618FC01 0x0009 hex:01 1 1                  # PLAY
+ct any write-by-id 0x1618FC01 0x0005 hex:9521b8e4...2429b 1 1    # announce (sha256)
+ct any write-by-id 0x1618FC01 0x0006 hex:06001e010806 1 1        # 6 frames @30fps, 8x6
+ct any write-by-id 0x1618FC01 0x0007 hex:00000608061eff8800... 1 1   # chunk
+ct any write-by-id 0x1618FC01 0x0009 hex:01 1 1                  # PLAY
 ```
 
 ### 4. Control the light (standard clusters)
@@ -87,7 +89,7 @@ uv run python effects.py <effect> [options]
 | `strobe` | `effects.py strobe --color ffffff --rate 4` |
 | `fire` | `effects.py fire --seed 3` |
 
-Options: `--color RRGGBB`, `--seconds`, `--fps 30`, `--node-id 1`, `--prefix ./chip-tool`.
+Options: `--color RRGGBB`, `--seconds`, `--fps 30`, `--node-id 1`, `--prefix ct`.
 
 ## Cluster (0x1618FC01)
 
