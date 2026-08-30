@@ -35,7 +35,7 @@ set(EXTRA_COMPONENT_DIRS
     "${ESP_MATTER_PATH}/components"
     ${extra_components_dirs_append})
 
-project(light)
+project(matter_stream)
 
 # WARNING: This is just an example for using key for decrypting the encrypted OTA image
 # Please do not use it as is.

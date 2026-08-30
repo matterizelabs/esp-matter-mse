@@ -1,33 +1,123 @@
-# Matter WS2812 Animation Light
+# Matter Raw Stream
 
-A Matter **extended color light** on ESP32 that plays LED effects on a
-**48-LED (8×6) WS2812 matrix**. A companion tool generates procedural effects as raw RGB
-frames, which are streamed to the device over a **custom Matter vendor cluster**
-(`0x1618FC01`), cached in flash, and played back at 30 fps. Interactive control (on/off,
+A **raw byte-streaming device** for Matter. Bulk payloads arrive as chunked writes on a
+custom vendor cluster (`0x1618FC01`), are verified end to end, persisted to flash, and
+replayed on demand. The reference application is a **48-LED (8x6) WS2812 matrix animation
+light** on ESP32, where the stream is a sequence of RGB frames; interactive control (on/off,
 brightness, color) comes from the standard Matter light clusters.
 
-- **Vendor / Product:** Matterize Labs `0x1618` / `0x0001`
+Stream transport properties:
+
+- Chunked writes with a self-describing header (`frame_index`, `count`, payload dims, fps)
+- SHA-256 verification of the complete payload before it becomes playable
+- Flash persistence in 5 LRU slots, so a payload replays without re-streaming
+- Dedicated io task keeps all flash IO off the Matter stack
+- Robust against retransmitted, duplicated, or out-of-order chunks
+- Status, active-payload hash, and cached-payload list are exposed as attributes
+
+- **Vendor / Product:** Matterize Labs `0x1618` / `0x0001` (factory DAC)
 - **Target:** ESP32 (classic, no PSRAM), flashed via `/dev/ttyUSB0`
 - **Toolchain:** esp-idf `v6.0.2`, esp-matter `release-v1.6`
 
 ## How it works
 
 ```
-LED effect (solid / chase / rainbow / ...)
-   └─ tools/effects.py   generate → 8×6 RGB frames → SHA-256 + hex chunks
+raw payload (e.g. RGB frames)
+   └─ tools/effects.py   generate → frames → SHA-256 + hex chunks
         └─ chip-tool write-by-id (custom cluster 0x1618FC01)
-             └─ ESP32: RAM jitter buffer → 30 fps playback → RMT → WS2812
-                  └─ background flash cache (5 slots, LRU)
+             └─ ESP32 io task: dedup, flash cache (5 slots, LRU), hash verify
+                  └─ playback task: RAM jitter buffer → RMT → WS2812
 ```
 
 Transfer protocol (all writable attributes are octet strings, written as `hex:`):
 
-1. `TransferHash`  (`0x0005`) - announce target animation (SHA-256)
+1. `TransferHash`  (`0x0005`) - announce target payload (SHA-256)
 2. `TransferMeta`  (`0x0006`) - `[total_frames u16][fps u8][loop u8][w u8][h u8]`
 3. `FrameChunk`    (`0x0007`) - `[frame_index u16][count u8][w u8][h u8][fps u8][RGB…]`
 4. `PlayCmd`       (`0x0009`) - `hex:01` PLAY, `hex:02` STOP, `hex:03` CLEAR_CACHE
 
-Re-sending only `TransferHash` + `PlayCmd` for a cached hash replays from flash.
+Resending only `TransferHash` + `PlayCmd` for a cached hash replays from flash. A payload
+is only committed to the cache after its flash contents verify against the announced hash.
+
+## Example usage
+
+`ct` below is the chip-tool alias, device is node `1`, endpoint `1`.
+
+### 1. Build and flash
+
+```bash
+export IDF_PATH=$HOME/.espressif/versions/esp-idf/v6.0.2
+export ESP_MATTER_PATH=$HOME/.espressif/versions/esp-matter/release-v1.6
+. $IDF_PATH/export.sh
+. $ESP_MATTER_PATH/export.sh
+
+idf.py build
+idf.py -p /dev/ttyUSB0 flash
+```
+
+Flash the factory partition (DAC/PAI/CD, not written by `idf.py flash`) once:
+
+```bash
+BIN=tools/certs/out/1618_1/<uuid>/<uuid>-partition.bin
+esptool.py --port /dev/ttyUSB0 write_flash 0x18000 "$BIN"
+```
+
+### 2. Commission
+
+```bash
+chip-tool pairing code 1 MT:UFEA08-E150QJ850Y10      # or: pairing onnetwork 1 89674523 2245
+```
+
+### 3. Stream a payload
+
+Generate a chase effect as paste-ready commands:
+
+```bash
+cd tools
+uv run python effects.py chase --leds 2 --seconds 0.1 --color ff8800 --node-id 1 > /tmp/chase.sh
+```
+
+The script announces the payload, sends metadata and one chunk, then plays:
+
+```text
+# chase: leds=0..1 hold=3frames(0.1s) frames=6 chunks=1 hash=9521b8e42a9c6f7f988c17618a3a85d997c6c3ded58188a1b68af5eb2502429b
+./chip-tool any write-by-id 0x1618FC01 0x0005 hex:9521b8e42a9c6f7f988c17618a3a85d997c6c3ded58188a1b68af5eb2502429b 1 1
+./chip-tool any write-by-id 0x1618FC01 0x0006 hex:06001e010806 1 1
+./chip-tool any write-by-id 0x1618FC01 0x0007 hex:00000608061eff8800000000000000... 1 1   # 870-byte chunk, elided
+./chip-tool any write-by-id 0x1618FC01 0x0009 hex:01 1 1
+```
+
+Run it and check the transfer status (4 = playing):
+
+```bash
+sh /tmp/chase.sh
+ct any read-by-id 0x1618FC01 0x0008 1 1
+```
+
+### 4. Control the light live (standard clusters)
+
+```bash
+ct onoff on 1 1
+ct levelcontrol move-to-level 128 0 0 0 1 1               # brightness 50%
+ct colorcontrol move-to-hue-and-saturation 200 100 0 0 0 1 1   # hue 200 deg, sat 100%
+ct colorcontrol move-to-color-temperature 250 0 0 0 1 1   # 250 mireds (approx 4000K)
+```
+
+### 5. Replay from the flash cache
+
+Only the hash and the play command are needed; nothing is re-streamed:
+
+```bash
+ct any write-by-id 0x1618FC01 0x0005 hex:9521b8e42a9c6f7f988c17618a3a85d997c6c3ded58188a1b68af5eb2502429b 1 1
+ct any write-by-id 0x1618FC01 0x0009 hex:01 1 1
+```
+
+### 6. Stop and clear
+
+```bash
+ct any write-by-id 0x1618FC01 0x0009 hex:02 1 1   # STOP, matrix cleared
+ct any write-by-id 0x1618FC01 0x0009 hex:03 1 1   # CLEAR_CACHE, drop all cached payloads
+```
 
 ## Repository layout
 
@@ -38,12 +128,12 @@ partitions.csv            app + factory (fctry) + anim_cache
 main/                     app glue: app_main + app_driver + Kconfig.projbuild
 components/
 ├── ws2812_matrix/        board HAL + LED driver + button + color math
-└── animation/            flash cache + playback engine + wire codec + custom cluster
+└── animation/            flash cache + streaming engine + wire codec + custom cluster
 shared/
 └── wire_contract.json    single source of truth for the wire protocol
 tools/
 ├── generate_wire.py      wire_contract.json → anim_protocol.h + protocol.py
-├── effects.py            procedural LED effects → paste-ready chip-tool commands
+├── effects.py            reference payload generator (LED effects) → chip-tool commands
 ├── matter_anim/          effects / codec / cli / protocol
 ├── certs/                factory-partition (DAC/PAI/CD) tooling
 └── tests/                pytest suite (incl. wire-contract conformance)
@@ -58,23 +148,9 @@ docs/
   long-octet-string patch applied** - see `docs/esp-matter-patches/README.md`
 - Python 3.12+ with `uv`
 
-## Build & flash
+## Hardware config
 
-```bash
-export IDF_PATH=$HOME/.espressif/versions/esp-idf/v6.0.2
-export ESP_MATTER_PATH=$HOME/.espressif/versions/esp-matter/release-v1.6
-. $IDF_PATH/export.sh
-. $ESP_MATTER_PATH/export.sh
-export PATH="$ESP_MATTER_PATH/connectedhomeip/connectedhomeip/.environment/cipd/packages/pigweed:$PATH"
-
-idf.py set-target esp32
-idf.py build
-idf.py -p /dev/ttyUSB0 flash
-```
-
-The board profile path is set in `CMakeLists.txt`, so `ESP_MATTER_DEVICE_PATH` is not required.
-
-Hardware config is in `main/Kconfig.projbuild` (defaults):
+Config lives in `main/Kconfig.projbuild` (defaults):
 
 | Option | Default |
 |---|---|
@@ -83,15 +159,11 @@ Hardware config is in `main/Kconfig.projbuild` (defaults):
 | `CONFIG_MATRIX_SERPENTINE` | `y` |
 | `CONFIG_ANIM_FPS` | `30` |
 
-## Companion tool
+## Payload generator
 
-```bash
-cd tools
-uv run python effects.py <effect> [options] --node-id 1 > /tmp/anim.sh
-```
-
-Generates a procedural LED effect as a paste-ready sequence of `chip-tool any write-by-id`
-commands (hash → meta → chunks → play). Run each as `uv run python effects.py ...`:
+The reference light payload is a sequence of RGB frames. Generate effects as paste-ready
+`chip-tool any write-by-id` commands (hash → meta → chunks → play). Run each as
+`uv run python effects.py ...`:
 
 | Effect | Example |
 |---|---|
@@ -130,8 +202,8 @@ Standard light clusters (interactive control):
 ct onoff on 1 1
 ct onoff off 1 1
 ct levelcontrol move-to-level 128 0 0 0 1 1                              # brightness 50%
-ct colorcontrol move-to-hue-and-saturation 200 100 0 0 0 1 1              # hue 200°, sat 100%
-ct colorcontrol move-to-color-temperature 250 0 0 0 1 1                   # 250 mireds (≈4000K)
+ct colorcontrol move-to-hue-and-saturation 200 100 0 0 0 1 1              # hue 200 deg, sat 100%
+ct colorcontrol move-to-color-temperature 250 0 0 0 1 1                   # 250 mireds (approx 4000K)
 ```
 
 ## Wire contract
@@ -159,10 +231,3 @@ Onboarding / setup:
 | QR code | `MT:UFEA08-E150QJ850Y10` |
 | Discriminator | `2245` |
 | Passcode | `89674523` |
-
-The `fctry` partition must be flashed separately (it is not written by `idf.py flash`):
-
-```bash
-BIN=tools/certs/out/1618_1/<uuid>/<uuid>-partition.bin
-esptool.py --port /dev/ttyUSB0 write_flash 0x18000 "$BIN"
-```
