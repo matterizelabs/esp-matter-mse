@@ -1,10 +1,10 @@
 # esp-matter-mse
 
-Matter **Manufacturer Specific Extensions (MSE)** reference. Matter reserves cluster IDs
-`0xFC00`-`0xFFFE` for custom clusters, attributes, and commands beyond the standard device types.
-This project defines one such cluster (`0x1618FC01` = Matterize VID `0x1618` + `0xFC01`) that
-streams raw byte payloads to an ESP32, SHA-256-verifies them, caches them in flash (5 LRU slots),
-and replays them. Reference sink: a 48-LED (8x6) WS2812 matrix light.
+Matter lets manufacturers add custom clusters, attributes, and commands on top of the standard
+device types through **Manufacturer Specific Extensions (MSE)**. This project is a working
+reference: it defines a custom cluster (`0x1618FC01`, Matterize vendor ID `0x1618`) that streams
+raw byte payloads to an ESP32, verifies them with SHA-256, caches them in flash across 5 LRU
+slots, and replays them on demand. The demo sink is a 48-LED (8x6) WS2812 matrix light.
 
 ## Quick start
 
