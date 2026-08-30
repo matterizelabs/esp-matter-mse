@@ -1,7 +1,7 @@
 # Matter attestation: CD, PAI/DAC and factory partition
 
-Test (development) attestation material for the Matterize Labs "WS2812 Animation
-Light" (VID `0x1618`, PID `0x0001`). Everything here uses the Matter **test**
+Test (development) attestation material for the Matterize Labs "Matter MSE Demo"
+(VID `0x1618`, PID `0x0001`). Everything here uses the Matter **test**
 credentials shipped with the connectedhomeip checkout - do not use for
 production.
 
@@ -13,7 +13,7 @@ directory is this README.
 
 | Path | Purpose |
 |------|---------|
-| `firmware/main/certification_declaration/certification_declaration.der` | Test Certification Declaration (CD), signed with `Chip-Test-CD-Signing-Key.pem`, embedded into the firmware |
+| `main/certification_declaration/certification_declaration.der` | Test Certification Declaration (CD), signed with `Chip-Test-CD-Signing-Key.pem`, embedded into the firmware |
 | `tools/certs/out/<vid>_<pid>/<uuid>/<uuid>-partition.bin` | Factory (NVS `fctry`) partition containing DAC + PAI + CD + discriminator/passcode |
 | `tools/certs/out/<vid>_<pid>/<uuid>/<uuid>-onb_codes.csv` | Onboarding codes (QR / manual code / discriminator / passcode) |
 
@@ -46,7 +46,7 @@ CHIP=~/.espressif/versions/esp-matter/release-v1.6/connectedhomeip/connectedhome
   -c "CSA00000SWC00000-01" -l 0 -i 0 -n 1 -t 0 \
   -K "$CHIP/credentials/test/certification-declaration/Chip-Test-CD-Signing-Key.pem" \
   -C "$CHIP/credentials/test/certification-declaration/Chip-Test-CD-Signing-Cert.pem" \
-  -O firmware/main/certification_declaration/certification_declaration.der
+  -O main/certification_declaration/certification_declaration.der
 ```
 
 ## 3. Generate the factory partition (DAC + PAI + CD + discriminator/passcode)
@@ -57,10 +57,12 @@ CHIP=~/.espressif/versions/esp-matter/release-v1.6/connectedhomeip/connectedhome
 
 esp-matter-mfg-tool \
   --passcode 89674523 --discriminator 2245 \
-  -cd firmware/main/certification_declaration/certification_declaration.der \
+  -cd main/certification_declaration/certification_declaration.der \
   -v 0x1618 --vendor-name "Matterize Labs" \
-  -p 0x0001 --product-name "WS2812 Animation Light" \
+  -p 0x0001 --product-name "Matter MSE Demo" \
   --hw-ver 1 --hw-ver-str v1.0 \
+  --serial-num MLABS-DEMO-01 \
+  --product-url https://matterizelabs.com \
   --paa \
   -k "$CHIP/credentials/test/attestation/Chip-Test-PAA-NoVID-Key.pem" \
   -c "$CHIP/credentials/test/attestation/Chip-Test-PAA-NoVID-Cert.pem" \
@@ -75,13 +77,13 @@ Output (one `<uuid>` directory per device) is under
 ## 4. Flash the factory partition
 
 ```bash
-cd firmware
 idf.py -p /dev/ttyUSB0 flash
 parttool.py -p /dev/ttyUSB0 write_partition --partition-name fctry \
-  ../tools/certs/out/1618_1/<uuid>/<uuid>-partition.bin
+  tools/certs/out/1618_1/<uuid>/<uuid>-partition.bin
 ```
 
-## 5. Verify VID/PID (chip-tool)
+## 5. Verify Basic Information (chip-tool)
 
-Commission with chip-tool and read `Basic Information` - it must report
-VID `0x1618` and PID `0x0001`.
+Commission with chip-tool and read `Basic Information` - it must report VID
+`0x1618`, PID `0x0001`, product name "Matter MSE Demo", serial number
+"MLABS-DEMO-01", and product URL "https://matterizelabs.com".
