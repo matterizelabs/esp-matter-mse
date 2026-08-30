@@ -13,7 +13,7 @@ menu "WS2812 Matrix"
     config MATRIX_SERPENTINE
         bool "Serpentine (zigzag) wiring"
         default y
-    config ANIM_FPS
-        int "Animation FPS"
+    config STREAM_FPS
+        int "Stream FPS"
         default 30
 endmenu

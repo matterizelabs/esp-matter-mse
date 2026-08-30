@@ -1,4 +1,4 @@
-from matter_anim import cli
+from matter_stream import cli
 
 def test_build_commands_sequence():
     node = 1234

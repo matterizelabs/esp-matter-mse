@@ -1,4 +1,4 @@
-from matter_anim import effects
+from matter_stream import effects
 
 
 FRAME_BYTES = 8 * 6 * 3

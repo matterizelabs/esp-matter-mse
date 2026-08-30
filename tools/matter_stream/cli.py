@@ -1,4 +1,4 @@
-from matter_anim import codec
+from matter_stream import codec
 
 
 def build_commands(node_id, hash_bytes, meta_bytes, chunks):

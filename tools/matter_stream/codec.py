@@ -1,6 +1,6 @@
 import hashlib, struct
 
-from matter_anim.protocol import (
+from matter_stream.protocol import (
     CLUSTER_ID,
     ATTR_TRANSFER_HASH,
     ATTR_TRANSFER_META,
@@ -36,7 +36,7 @@ def encode_chunk(frame_index, frames, width, height, fps):
 def encode_meta(total_frames, fps, loop, width, height):
     return struct.pack(META_FMT, total_frames, fps, loop, width, height)
 
-def animation_hash(frames):
+def stream_hash(frames):
     return hashlib.sha256(b"".join(frames)).digest()
 
 def pack_chunks(frames, width, height, fps):

@@ -1,7 +1,7 @@
 [project]
 name = "matter-effects"
 version = "0.1.0"
-description = "Generate WS2812 LED effects as Matter animation payloads"
+description = "Generate WS2812 LED effects as Matter stream payloads"
 authors = [
     { name = "abu-matterize", email = "abu@matterize.io" }
 ]
@@ -19,4 +19,4 @@ dev = [
 
 [tool.uv.build-backend]
 module-root = ""
-module-name = "matter_anim"
+module-name = "matter_stream"

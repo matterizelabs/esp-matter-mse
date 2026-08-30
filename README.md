@@ -112,7 +112,7 @@ Options: `--color RRGGBB`, `--seconds`, `--fps 30`, `--node-id 1`, `--prefix ct`
 main/               app_main, app_driver, Kconfig.projbuild
 components/
   ws2812_matrix/    LED driver, button, color math
-  animation/        stream engine, flash cache, wire codec, cluster
+  stream_engine/    stream engine, flash cache, wire codec, cluster
 shared/wire_contract.json   protocol source of truth
 tools/              effects.py, codec, tests, certs
 docs/esp-matter-patches/    required SDK patch
@@ -120,7 +120,7 @@ docs/esp-matter-patches/    required SDK patch
 
 ## Prereqs and config
 
-- esp-idf `v6.0.2`, esp-matter `release-v1.6` (with long-octet-string patch,
+esp-idf `v6.0.2`, esp-matter `release-v1.6` (with long-octet-string patch,
   `docs/esp-matter-patches/README.md`), Python 3.12+ with `uv`
 
 | Kconfig | Default |
@@ -128,7 +128,7 @@ docs/esp-matter-patches/    required SDK patch
 | `CONFIG_WS2812_GPIO` | `3` |
 | `CONFIG_MATRIX_WIDTH` / `_HEIGHT` | `8` / `6` |
 | `CONFIG_MATRIX_SERPENTINE` | `y` |
-| `CONFIG_ANIM_FPS` | `30` |
+| `CONFIG_STREAM_FPS` | `30` |
 
 Regenerate wire artifacts after editing `wire_contract.json`:
 

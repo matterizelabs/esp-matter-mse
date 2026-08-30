@@ -13,7 +13,7 @@ import colorsys
 import math
 import random
 
-from matter_anim import codec
+from matter_stream import codec
 
 
 def _blank(width, height):

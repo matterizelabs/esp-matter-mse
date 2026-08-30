@@ -1,9 +1,9 @@
-#include "animation.h"
+#include "stream_engine.h"
 using namespace esp_matter;
 static uint8_t s_hash[32] = {0}, s_meta[6] = {0}, s_frame[1100] = {0};
 static uint8_t s_cmd[1] = {0}, s_active[32] = {0}, s_cached[160] = {0};
 
-cluster_t *anim::anim_cluster_create(endpoint_t *ep) {
+cluster_t *stream::cluster_create(endpoint_t *ep) {
     cluster_t *c = cluster::create(ep, CLUSTER_ID, CLUSTER_FLAG_SERVER);
     attribute::create(c, ATTR_MATRIX_WIDTH, ATTRIBUTE_FLAG_NONE, esp_matter_uint16(CONFIG_MATRIX_WIDTH));
     attribute::create(c, ATTR_MATRIX_HEIGHT, ATTRIBUTE_FLAG_NONE, esp_matter_uint16(CONFIG_MATRIX_HEIGHT));

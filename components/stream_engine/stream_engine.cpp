@@ -1,4 +1,4 @@
-#include "animation.h"
+#include "stream_engine.h"
 #include "esp_log.h"
 #include "esp_matter.h"
 #include "freertos/FreeRTOS.h"
@@ -9,22 +9,22 @@
 #include <atomic>
 #include <string.h>
 
-#define TAG "anim_engine"
+#define TAG "stream_engine"
 #define LED_COUNT (CONFIG_MATRIX_WIDTH * CONFIG_MATRIX_HEIGHT)
 #define FRAME_BYTES (LED_COUNT * 3)
 #define RING_LEN 8
 #define WORK_Q_LEN 16
 #define CHUNK_POOL_LEN 8
 #define CHUNK_BUF_SZ 1100
-#define BITMAP_BYTES ((ANIM_MAX_FRAMES + 7) / 8)
+#define BITMAP_BYTES ((STREAM_MAX_FRAMES + 7) / 8)
 
 enum {
-    ANIM_STATUS_IDLE = 0,
-    ANIM_STATUS_ANNOUNCED = 1,
-    ANIM_STATUS_RECEIVING = 2,
-    ANIM_STATUS_READY = 4,   /* cached animation found */
-    ANIM_STATUS_PLAYING = 4,
-    ANIM_STATUS_ERROR = 5,
+    STREAM_STATUS_IDLE = 0,
+    STREAM_STATUS_ANNOUNCED = 1,
+    STREAM_STATUS_RECEIVING = 2,
+    STREAM_STATUS_READY = 4,   /* cached stream found */
+    STREAM_STATUS_PLAYING = 4,
+    STREAM_STATUS_ERROR = 5,
 };
 
 typedef enum { WORK_START = 1, WORK_META, WORK_CHUNK, WORK_PLAY, WORK_STOP, WORK_CLEAR } work_type_t;
@@ -55,13 +55,13 @@ static bool s_cached_hit = false;
 static bool s_transfer = false;
 static uint8_t s_pending_hash[32];
 static uint16_t s_total = 0;
-static uint8_t s_fps = CONFIG_ANIM_FPS;
+static uint8_t s_fps = CONFIG_STREAM_FPS;
 static uint8_t s_loop = 1;
 static uint8_t s_bitmap[BITMAP_BYTES];
 static int s_cache_slot = -1;
 static uint16_t s_cache_idx = 0;
 static uint16_t s_cache_frames = 0;
-static uint8_t s_cache_fps = CONFIG_ANIM_FPS;
+static uint8_t s_cache_fps = CONFIG_STREAM_FPS;
 static uint8_t s_last_status = 0xFF;
 
 extern uint16_t light_endpoint_id;
@@ -70,29 +70,29 @@ extern uint16_t light_endpoint_id;
 /* attribute reporting (io task context)                                      */
 /* ------------------------------------------------------------------------- */
 
-void anim_set_status(uint8_t status) {
+void stream_set_status(uint8_t status) {
     if (status == s_last_status) return;   /* only report on change, not per chunk */
     s_last_status = status;
     ESP_LOGI(TAG, "transfer status -> %u", status);
     esp_matter_attr_val_t val = esp_matter_enum8(status);
-    if (esp_matter::attribute::update(light_endpoint_id, anim::CLUSTER_ID, anim::ATTR_STATUS, &val) != ESP_OK) {
+    if (esp_matter::attribute::update(light_endpoint_id, stream::CLUSTER_ID, stream::ATTR_STATUS, &val) != ESP_OK) {
         ESP_LOGE(TAG, "failed to update ATTR_STATUS");
     }
 }
 
 static void set_active(const uint8_t *hash) {
     esp_matter_attr_val_t val = esp_matter_octet_str((uint8_t *)hash, 32);
-    if (esp_matter::attribute::update(light_endpoint_id, anim::CLUSTER_ID, anim::ATTR_ACTIVE, &val) != ESP_OK) {
+    if (esp_matter::attribute::update(light_endpoint_id, stream::CLUSTER_ID, stream::ATTR_ACTIVE, &val) != ESP_OK) {
         ESP_LOGE(TAG, "failed to update ATTR_ACTIVE");
     }
 }
 
 static void report_cached(void) {
-    static uint8_t blobs[ANIM_SLOT_COUNT * 32];
+    static uint8_t blobs[STREAM_SLOT_COUNT * 32];
     memset(blobs, 0, sizeof(blobs));
-    for (int i = 0; i < ANIM_SLOT_COUNT; i++) anim_flash_get_slot_hash(i, blobs + i * 32, 32);
+    for (int i = 0; i < STREAM_SLOT_COUNT; i++) stream_flash_get_slot_hash(i, blobs + i * 32, 32);
     esp_matter_attr_val_t val = esp_matter_octet_str(blobs, sizeof(blobs));
-    if (esp_matter::attribute::update(light_endpoint_id, anim::CLUSTER_ID, anim::ATTR_CACHED, &val) != ESP_OK) {
+    if (esp_matter::attribute::update(light_endpoint_id, stream::CLUSTER_ID, stream::ATTR_CACHED, &val) != ESP_OK) {
         ESP_LOGE(TAG, "failed to update ATTR_CACHED");
     }
 }
@@ -126,7 +126,7 @@ static void ring_reset(void) {
     xSemaphoreGive(s_ring_mtx);
 }
 
-bool anim_engine_push_frame(const uint8_t *chain_rgb, size_t len) {
+bool stream_engine_push_frame(const uint8_t *chain_rgb, size_t len) {
     if (len != FRAME_BYTES) return false;
     return ring_push(chain_rgb);
 }
@@ -154,13 +154,13 @@ static bool bitmap_get(uint32_t fi) { return (s_bitmap[fi >> 3] & (1u << (fi & 7
 static void bitmap_set(uint32_t fi) { s_bitmap[fi >> 3] |= (1u << (fi & 7)); }
 
 static void fail_transfer(void) {
-    if (s_transfer && s_slot >= 0) anim_flash_abort(s_slot);
+    if (s_transfer && s_slot >= 0) stream_flash_abort(s_slot);
     s_transfer = false;
     s_cached_hit = false;
     s_slot = -1;
     s_total = 0;
     report_cached();
-    anim_set_status(ANIM_STATUS_ERROR);
+    stream_set_status(STREAM_STATUS_ERROR);
 }
 
 static void stop_playback(void) {
@@ -175,30 +175,30 @@ static void stop_playback(void) {
 
 static void handle_start(const uint8_t *hash) {
     memcpy(s_pending_hash, hash, 32);
-    int found = anim_flash_find(hash);
+    int found = stream_flash_find(hash);
     if (found >= 0) {
         /* already cached: playback from flash, ignore any re-streamed chunks */
         s_slot = found;
         s_cached_hit = true;
         s_transfer = false;
-        anim_set_status(ANIM_STATUS_READY);
+        stream_set_status(STREAM_STATUS_READY);
         return;
     }
     /* miss: stop current playback first so its slot can be reclaimed */
     stop_playback();
     s_cached_hit = false;
-    s_slot = anim_flash_alloc_slot();
+    s_slot = stream_flash_alloc_slot();
     if (s_slot < 0) {
-        anim_set_status(ANIM_STATUS_ERROR);
+        stream_set_status(STREAM_STATUS_ERROR);
         return;
     }
     s_transfer = true;
     s_total = 0;
-    s_fps = CONFIG_ANIM_FPS;
+    s_fps = CONFIG_STREAM_FPS;
     s_loop = 1;
     memset(s_bitmap, 0, sizeof(s_bitmap));
     report_cached();
-    anim_set_status(ANIM_STATUS_ANNOUNCED);
+    stream_set_status(STREAM_STATUS_ANNOUNCED);
 }
 
 static void handle_meta(const uint8_t *meta, size_t len) {
@@ -209,17 +209,17 @@ static void handle_meta(const uint8_t *meta, size_t len) {
     uint8_t width = meta[4];
     uint8_t height = meta[5];
     if (width != CONFIG_MATRIX_WIDTH || height != CONFIG_MATRIX_HEIGHT) { fail_transfer(); return; }
-    if (total == 0 || total > ANIM_MAX_FRAMES) { fail_transfer(); return; }
-    if ((uint32_t)total * FRAME_BYTES > ANIM_SLOT_SIZE) { fail_transfer(); return; }
+    if (total == 0 || total > STREAM_MAX_FRAMES) { fail_transfer(); return; }
+    if ((uint32_t)total * FRAME_BYTES > STREAM_SLOT_SIZE) { fail_transfer(); return; }
     s_total = total;
-    s_fps = (fps >= 1 && fps <= 60) ? fps : CONFIG_ANIM_FPS;
+    s_fps = (fps >= 1 && fps <= 60) ? fps : CONFIG_STREAM_FPS;
     s_loop = loop ? 1 : 0;
     ESP_LOGI(TAG, "transfer meta: %u frames @ %u fps, loop=%u, %ux%u", total, s_fps, s_loop, width, height);
 }
 
 static void handle_chunk(const uint8_t *data, size_t len) {
-    anim_chunk_hdr_t hdr;
-    if (!anim_parse_chunk_header(data, len, &hdr)) return;
+    stream_chunk_hdr_t hdr;
+    if (!stream_parse_chunk_header(data, len, &hdr)) return;
     if (hdr.width != CONFIG_MATRIX_WIDTH || hdr.height != CONFIG_MATRIX_HEIGHT) { fail_transfer(); return; }
     if (len < 6 + (size_t)hdr.count * FRAME_BYTES) { fail_transfer(); return; }
     if (!s_transfer) return;   /* cached-hit: streamed chunks are ignored, nothing is rewritten */
@@ -230,13 +230,13 @@ static void handle_chunk(const uint8_t *data, size_t len) {
         if (bitmap_get(fi)) continue;   /* retransmitted frame: skip write/hash/push */
         bitmap_set(fi);
         const uint8_t *frame = px + k * FRAME_BYTES;
-        anim_engine_push_frame(frame, FRAME_BYTES);   /* preview immediately (drop if ring full) */
-        if (anim_flash_write(s_slot, fi * FRAME_BYTES, frame, FRAME_BYTES) != ESP_OK) {
+        stream_engine_push_frame(frame, FRAME_BYTES);   /* preview immediately (drop if ring full) */
+        if (stream_flash_write(s_slot, fi * FRAME_BYTES, frame, FRAME_BYTES) != ESP_OK) {
             fail_transfer();
             return;
         }
     }
-    anim_set_status(ANIM_STATUS_RECEIVING);   /* deduped: reported only on first chunk */
+    stream_set_status(STREAM_STATUS_RECEIVING);   /* deduped: reported only on first chunk */
 }
 
 /* hash of the frames as persisted in flash must equal the announced hash;
@@ -249,7 +249,7 @@ static bool verify_slot(int slot, uint16_t total, const uint8_t *expect) {
     psa_hash_operation_t op = PSA_HASH_OPERATION_INIT;
     if (psa_hash_setup(&op, PSA_ALG_SHA_256) != PSA_SUCCESS) return false;
     for (uint16_t i = 0; i < total; i++) {
-        if (anim_flash_read_frame(slot, i, fbuf, sizeof(fbuf)) != ESP_OK ||
+        if (stream_flash_read_frame(slot, i, fbuf, sizeof(fbuf)) != ESP_OK ||
             psa_hash_update(&op, fbuf, FRAME_BYTES) != PSA_SUCCESS) {
             psa_hash_abort(&op);
             return false;
@@ -263,29 +263,29 @@ static void handle_play(void) {
     if (s_cached_hit) {
         uint16_t frames = 0;
         uint8_t fps = 0, loop = 0;
-        if (s_slot < 0 || anim_flash_get_slot_info(s_slot, &frames, &fps, &loop) != ESP_OK || frames == 0) {
-            anim_set_status(ANIM_STATUS_ERROR);
+        if (s_slot < 0 || stream_flash_get_slot_info(s_slot, &frames, &fps, &loop) != ESP_OK || frames == 0) {
+            stream_set_status(STREAM_STATUS_ERROR);
             return;
         }
         /* verify persisted data still matches the slot hash; catches slots torn
          * by a power loss during an earlier interrupted transfer */
         if (!verify_slot(s_slot, frames, s_pending_hash)) {
-            anim_set_status(ANIM_STATUS_ERROR);
+            stream_set_status(STREAM_STATUS_ERROR);
             return;
         }
         ring_reset();
         s_cache_slot = s_slot;
         s_cache_frames = frames;
-        s_cache_fps = (fps >= 1 && fps <= 60) ? fps : CONFIG_ANIM_FPS;
+        s_cache_fps = (fps >= 1 && fps <= 60) ? fps : CONFIG_STREAM_FPS;
         s_cache_idx = 0;
         s_running = true;
         set_active(s_pending_hash);
-        anim_set_status(ANIM_STATUS_PLAYING);
+        stream_set_status(STREAM_STATUS_PLAYING);
         return;
     }
     if (!s_transfer || s_slot < 0 || s_total == 0) { fail_transfer(); return; }
     if (!verify_slot(s_slot, s_total, s_pending_hash)) { fail_transfer(); return; }
-    if (anim_flash_commit(s_slot, s_pending_hash, s_total, s_fps, s_loop) != ESP_OK) { fail_transfer(); return; }
+    if (stream_flash_commit(s_slot, s_pending_hash, s_total, s_fps, s_loop) != ESP_OK) { fail_transfer(); return; }
     s_transfer = false;
     s_cached_hit = false;
     ring_reset();
@@ -296,31 +296,31 @@ static void handle_play(void) {
     s_running = true;
     set_active(s_pending_hash);
     report_cached();
-    anim_set_status(ANIM_STATUS_PLAYING);
+    stream_set_status(STREAM_STATUS_PLAYING);
 }
 
 static void handle_stop(void) {
     stop_playback();
-    anim_set_status(ANIM_STATUS_IDLE);
+    stream_set_status(STREAM_STATUS_IDLE);
     xSemaphoreGive(s_stop_done);
 }
 
 static void handle_clear(void) {
     stop_playback();
-    anim_flash_clear_all();
+    stream_flash_clear_all();
     report_cached();
-    anim_set_status(ANIM_STATUS_IDLE);
+    stream_set_status(STREAM_STATUS_IDLE);
 }
 
 static void push_cache_frame(void) {
     if (!s_running || s_cache_slot < 0) return;
     static uint8_t frame[FRAME_BYTES];
-    if (anim_flash_read_frame(s_cache_slot, s_cache_idx, frame, sizeof(frame)) != ESP_OK) {
+    if (stream_flash_read_frame(s_cache_slot, s_cache_idx, frame, sizeof(frame)) != ESP_OK) {
         stop_playback();
-        anim_set_status(ANIM_STATUS_ERROR);
+        stream_set_status(STREAM_STATUS_ERROR);
         return;
     }
-    anim_engine_push_frame(frame, FRAME_BYTES);
+    stream_engine_push_frame(frame, FRAME_BYTES);
     s_cache_idx = (s_cache_idx + 1) % s_cache_frames;
 }
 
@@ -378,19 +378,19 @@ static bool queue_item(uint8_t type, const void *payload, size_t len) {
     return xQueueSend(s_work_q, &it, pdMS_TO_TICKS(50)) == pdTRUE;
 }
 
-void anim_handle_transfer_hash(const uint8_t *hash, size_t len) {
+void stream_handle_transfer_hash(const uint8_t *hash, size_t len) {
     if (len != 32) return;
     queue_item(WORK_START, hash, 32);
 }
 
-void anim_handle_transfer_meta(const uint8_t *meta, size_t len) {
+void stream_handle_transfer_meta(const uint8_t *meta, size_t len) {
     if (len != 6) return;
     queue_item(WORK_META, meta, len);
 }
 
-void anim_handle_frame_chunk(const uint8_t *data, size_t len) {
-    anim_chunk_hdr_t hdr;
-    if (!anim_parse_chunk_header(data, len, &hdr)) return;
+void stream_handle_frame_chunk(const uint8_t *data, size_t len) {
+    stream_chunk_hdr_t hdr;
+    if (!stream_parse_chunk_header(data, len, &hdr)) return;
     if (hdr.width != CONFIG_MATRIX_WIDTH || hdr.height != CONFIG_MATRIX_HEIGHT) return;
     if (len < 6 + (size_t)hdr.count * FRAME_BYTES || len > CHUNK_BUF_SZ) return;
     uint8_t pidx;
@@ -409,7 +409,7 @@ void anim_handle_frame_chunk(const uint8_t *data, size_t len) {
     }
 }
 
-void anim_handle_play_cmd(uint8_t cmd) {
+void stream_handle_play_cmd(uint8_t cmd) {
     if (cmd == 1) {
         queue_item(WORK_PLAY, NULL, 0);
     } else if (cmd == 2) {
@@ -423,7 +423,7 @@ void anim_handle_play_cmd(uint8_t cmd) {
 /* public control                                                             */
 /* ------------------------------------------------------------------------- */
 
-esp_err_t anim_engine_init(ws2812_matrix_handle_t m) {
+esp_err_t stream_engine_init(ws2812_matrix_handle_t m) {
     s_matrix = m;
     s_work_q = xQueueCreate(WORK_Q_LEN, sizeof(work_item_t));
     s_fill_q = xQueueCreate(RING_LEN, sizeof(uint8_t));
@@ -434,14 +434,14 @@ esp_err_t anim_engine_init(ws2812_matrix_handle_t m) {
     uint8_t i;
     for (i = 0; i < RING_LEN; i++) xQueueSend(s_free_q, &i, 0);
     for (i = 0; i < CHUNK_POOL_LEN; i++) xQueueSend(s_pool_q, &i, 0);
-    xTaskCreate(playback_task, "anim_play", 4096, NULL, 10, NULL);
-    xTaskCreate(io_task, "anim_io", 8192, NULL, 9, NULL);
+    xTaskCreate(playback_task, "stream_play", 4096, NULL, 10, NULL);
+    xTaskCreate(io_task, "stream_io", 8192, NULL, 9, NULL);
     return ESP_OK;
 }
 
-void anim_engine_set_brightness(uint8_t pct) { s_brightness.store(pct > 100 ? 100 : pct, std::memory_order_relaxed); }
+void stream_engine_set_brightness(uint8_t pct) { s_brightness.store(pct > 100 ? 100 : pct, std::memory_order_relaxed); }
 
-void anim_engine_stop(void) {
+void stream_engine_stop(void) {
     while (xSemaphoreTake(s_stop_done, 0) == pdTRUE) { /* drain stale acks */
     }
     work_item_t it;
@@ -451,4 +451,4 @@ void anim_engine_stop(void) {
     xSemaphoreTake(s_stop_done, pdMS_TO_TICKS(1000));
 }
 
-bool anim_engine_is_running(void) { return s_running.load(std::memory_order_relaxed); }
+bool stream_engine_is_running(void) { return s_running.load(std::memory_order_relaxed); }

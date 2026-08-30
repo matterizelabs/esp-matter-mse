@@ -1,5 +1,5 @@
 import hashlib, struct
-from matter_anim import codec
+from matter_stream import codec
 
 def test_serpentine_2x3():
     # chain order for W=2,H=3 serpentine:
@@ -26,9 +26,9 @@ def test_encode_chunk_header():
 def test_encode_meta():
     assert codec.encode_meta(900, 30, 1, 8, 6) == struct.pack("<HBBBB", 900, 30, 1, 8, 6)
 
-def test_animation_hash_is_sha256_of_concat():
+def test_stream_hash_is_sha256_of_concat():
     frames = [b"\x00"*144, b"\xff"*144]
-    assert codec.animation_hash(frames) == hashlib.sha256(b"\x00"*144 + b"\xff"*144).digest()
+    assert codec.stream_hash(frames) == hashlib.sha256(b"\x00"*144 + b"\xff"*144).digest()
 
 def test_pack_chunks_max_1kb():
     frames = [bytes([i % 256])*144 for i in range(900)]

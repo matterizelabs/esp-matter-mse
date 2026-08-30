@@ -20,7 +20,7 @@
 
 #include <app_priv.h>
 #include <app_reset.h>
-#include "animation.h"
+#include "stream_engine.h"
 #if CHIP_DEVICE_CONFIG_ENABLE_THREAD
 #include <platform/ESP32/OpenthreadLauncher.h>
 #endif
@@ -156,11 +156,11 @@ static esp_err_t app_attribute_update_cb(attribute::callback_type_t type, uint16
     esp_err_t err = ESP_OK;
 
     if (type == PRE_UPDATE) {
-        if (cluster_id == anim::CLUSTER_ID) {
-            if (attribute_id == anim::ATTR_TRANSFER_HASH) anim_handle_transfer_hash(val->val.a.b, val->val.a.s);
-            else if (attribute_id == anim::ATTR_TRANSFER_META) anim_handle_transfer_meta(val->val.a.b, val->val.a.s);
-            else if (attribute_id == anim::ATTR_FRAME_CHUNK) anim_handle_frame_chunk(val->val.a.b, val->val.a.s);
-            else if (attribute_id == anim::ATTR_PLAY_CMD && val->val.a.s >= 1) anim_handle_play_cmd(val->val.a.b[0]);
+        if (cluster_id == stream::CLUSTER_ID) {
+            if (attribute_id == stream::ATTR_TRANSFER_HASH) stream_handle_transfer_hash(val->val.a.b, val->val.a.s);
+            else if (attribute_id == stream::ATTR_TRANSFER_META) stream_handle_transfer_meta(val->val.a.b, val->val.a.s);
+            else if (attribute_id == stream::ATTR_FRAME_CHUNK) stream_handle_frame_chunk(val->val.a.b, val->val.a.s);
+            else if (attribute_id == stream::ATTR_PLAY_CMD && val->val.a.s >= 1) stream_handle_play_cmd(val->val.a.b[0]);
             return ESP_OK;
         }
         /* Driver update */
@@ -208,7 +208,7 @@ extern "C" void app_main()
     endpoint_t *endpoint = extended_color_light::create(node, &light_config, ENDPOINT_FLAG_NONE, light_handle);
     ABORT_APP_ON_FAILURE(endpoint != nullptr, ESP_LOGE(TAG, "Failed to create extended color light endpoint"));
 
-    anim::anim_cluster_create(endpoint);
+    stream::cluster_create(endpoint);
 
     light_endpoint_id = endpoint::get_id(endpoint);
     ESP_LOGI(TAG, "Light created with endpoint_id %d", light_endpoint_id);
@@ -254,9 +254,9 @@ extern "C" void app_main()
     }
 #endif /* CONFIG_ENABLE_SET_CERT_DECLARATION_API */
 
-    /* Initialize the animation flash cache */
-    err = anim_flash_init();
-    ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to init animation flash cache, err:%d", err));
+    /* Initialize the stream flash cache */
+    err = stream_flash_init();
+    ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to init stream flash cache, err:%d", err));
 
     /* Matter start */
     err = esp_matter::start(app_event_cb);

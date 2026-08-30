@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Generate the C and Python wire-contract definitions from shared/wire_contract.json.
 
-Single source of truth for the animation wire protocol (cluster/attribute IDs,
+Single source of truth for the stream wire protocol (cluster/attribute IDs,
 chunk/meta byte layout, max chunk size) shared between the ESP32 firmware and
 the companion Python tool (tools/effects.py).
 
 Outputs:
-  components/animation/include/anim_protocol.h   (C)
-  tools/matter_anim/protocol.py                  (Python)
+  components/stream_engine/include/stream_protocol.h   (C)
+  tools/matter_stream/protocol.py                        (Python)
 
 Run from the repo root:  python3 tools/generate_wire.py
 """
@@ -16,8 +16,8 @@ import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCHEMA = os.path.join(ROOT, "shared", "wire_contract.json")
-C_OUT = os.path.join(ROOT, "components", "animation", "include", "anim_protocol.h")
-PY_OUT = os.path.join(ROOT, "tools", "matter_anim", "protocol.py")
+C_OUT = os.path.join(ROOT, "components", "stream_engine", "include", "stream_protocol.h")
+PY_OUT = os.path.join(ROOT, "tools", "matter_stream", "protocol.py")
 
 C_TYPES = {"u8": "uint8_t", "u16": "uint16_t", "u32": "uint32_t"}
 PY_FMT = {"u8": "B", "u16": "H", "u32": "I"}
@@ -41,16 +41,16 @@ def generate(schema):
         'extern "C" {',
         "#endif",
         "",
-        f"#define ANIM_CLUSTER_ID {schema['cluster_id']}",
+        f"#define STREAM_CLUSTER_ID {schema['cluster_id']}",
     ]
     for name, val in attrs.items():
-        c_lines.append(f"#define ANIM_ATTR_{name.upper()} {val}")
+        c_lines.append(f"#define STREAM_ATTR_{name.upper()} {val}")
     c_lines += [
-        f"#define ANIM_CHUNK_MAX_BYTES {schema['chunk_max_bytes']}",
+        f"#define STREAM_CHUNK_MAX_BYTES {schema['chunk_max_bytes']}",
         "",
-        _c_struct("anim_chunk_hdr_t", schema["frame_chunk_header"]),
+        _c_struct("stream_chunk_hdr_t", schema["frame_chunk_header"]),
         "",
-        _c_struct("anim_transfer_meta_t", schema["transfer_meta"]),
+        _c_struct("stream_transfer_meta_t", schema["transfer_meta"]),
         "",
         "#ifdef __cplusplus",
         "}",

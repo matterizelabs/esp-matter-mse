@@ -1,8 +1,8 @@
 import argparse
 import sys
 
-from matter_anim import codec
-from matter_anim.cli import build_commands
+from matter_stream import codec
+from matter_stream.cli import build_commands
 
 
 def main(argv=None):
@@ -40,7 +40,7 @@ def main(argv=None):
         for _ in range(hold):
             frames.append(bytes(base))
 
-    h = codec.animation_hash(frames)
+    h = codec.stream_hash(frames)
     meta = codec.encode_meta(n_frames, args.fps, 1, args.width, args.height)
     chunks = codec.pack_chunks(frames, args.width, args.height, args.fps)
 

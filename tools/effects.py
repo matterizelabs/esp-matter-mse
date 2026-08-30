@@ -1,7 +1,7 @@
 import argparse
 import sys
 
-from matter_anim import cli, codec, effects
+from matter_stream import cli, codec, effects
 
 
 def main(argv=None):
@@ -66,7 +66,7 @@ def main(argv=None):
         print(f"error: {len(frames)} frames = {slot_bytes} bytes exceeds 128 KiB cache slot", file=sys.stderr)
         return 2
 
-    h = codec.animation_hash(frames)
+    h = codec.stream_hash(frames)
     meta = codec.encode_meta(len(frames), args.fps, 1, args.width, args.height)
     chunks = codec.pack_chunks(frames, args.width, args.height, args.fps)
 

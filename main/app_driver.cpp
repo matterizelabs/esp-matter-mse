@@ -19,7 +19,7 @@
 
 #include <color_format.h>
 #include "ws2812_matrix.h"
-#include "animation.h"
+#include "stream_engine.h"
 
 using namespace chip::app::Clusters;
 using namespace esp_matter;
@@ -65,7 +65,7 @@ static esp_err_t app_driver_light_set_power(ws2812_matrix_handle_t handle, esp_m
 {
     s_power = val->val.b;
     if (!s_power) {
-        anim_engine_stop();
+        stream_engine_stop();
         ws2812_matrix_clear(handle);
         return ESP_OK;
     }
@@ -75,9 +75,9 @@ static esp_err_t app_driver_light_set_power(ws2812_matrix_handle_t handle, esp_m
 static esp_err_t app_driver_light_set_brightness(ws2812_matrix_handle_t handle, esp_matter_attr_val_t *val)
 {
     s_brightness = REMAP_TO_RANGE(val->val.u8, MATTER_BRIGHTNESS, STANDARD_BRIGHTNESS);
-    anim_engine_set_brightness(REMAP_TO_RANGE(val->val.u8, MATTER_BRIGHTNESS, 100));
-    /* Dim a running animation live; re-apply the static fill only in static mode. */
-    if (s_power && !anim_engine_is_running()) {
+    stream_engine_set_brightness(REMAP_TO_RANGE(val->val.u8, MATTER_BRIGHTNESS, 100));
+    /* Dim a running stream live; re-apply the static fill only in static mode. */
+    if (s_power && !stream_engine_is_running()) {
         return app_driver_update_static_color(handle);
     }
     return ESP_OK;
@@ -85,7 +85,7 @@ static esp_err_t app_driver_light_set_brightness(ws2812_matrix_handle_t handle, 
 
 static esp_err_t app_driver_light_set_hue(ws2812_matrix_handle_t handle, esp_matter_attr_val_t *val)
 {
-    anim_engine_stop();
+    stream_engine_stop();
     s_hs.hue = REMAP_TO_RANGE(val->val.u8, MATTER_HUE, STANDARD_HUE);
     s_color_mode = (uint8_t)ColorControl::ColorMode::kCurrentHueAndCurrentSaturation;
     return app_driver_update_static_color(handle);
@@ -93,7 +93,7 @@ static esp_err_t app_driver_light_set_hue(ws2812_matrix_handle_t handle, esp_mat
 
 static esp_err_t app_driver_light_set_saturation(ws2812_matrix_handle_t handle, esp_matter_attr_val_t *val)
 {
-    anim_engine_stop();
+    stream_engine_stop();
     s_hs.saturation = REMAP_TO_RANGE(val->val.u8, MATTER_SATURATION, STANDARD_SATURATION);
     s_color_mode = (uint8_t)ColorControl::ColorMode::kCurrentHueAndCurrentSaturation;
     return app_driver_update_static_color(handle);
@@ -101,7 +101,7 @@ static esp_err_t app_driver_light_set_saturation(ws2812_matrix_handle_t handle, 
 
 static esp_err_t app_driver_light_set_temperature(ws2812_matrix_handle_t handle, esp_matter_attr_val_t *val)
 {
-    anim_engine_stop();
+    stream_engine_stop();
     s_temp = REMAP_TO_RANGE_INVERSE(val->val.u16, STANDARD_TEMPERATURE_FACTOR);
     s_color_mode = (uint8_t)ColorControl::ColorMode::kColorTemperature;
     return app_driver_update_static_color(handle);
@@ -109,7 +109,7 @@ static esp_err_t app_driver_light_set_temperature(ws2812_matrix_handle_t handle,
 
 static esp_err_t app_driver_light_set_xy(ws2812_matrix_handle_t handle, uint16_t x, uint16_t y)
 {
-    anim_engine_stop();
+    stream_engine_stop();
     s_xy.x = x;
     s_xy.y = y;
     s_color_mode = (uint8_t)ColorControl::ColorMode::kCurrentXAndCurrentY;
@@ -173,7 +173,7 @@ esp_err_t app_driver_light_set_defaults(uint16_t endpoint_id)
     attribute_t *attribute = attribute::get(endpoint_id, LevelControl::Id, LevelControl::Attributes::CurrentLevel::Id);
     attribute::get_val(attribute, &val);
     s_brightness = REMAP_TO_RANGE(val.val.u8, MATTER_BRIGHTNESS, STANDARD_BRIGHTNESS);
-    anim_engine_set_brightness(REMAP_TO_RANGE(val.val.u8, MATTER_BRIGHTNESS, 100));
+    stream_engine_set_brightness(REMAP_TO_RANGE(val.val.u8, MATTER_BRIGHTNESS, 100));
 
     /* Setting color */
     attribute = attribute::get(endpoint_id, ColorControl::Id, ColorControl::Attributes::ColorMode::Id);
@@ -220,7 +220,7 @@ app_driver_handle_t app_driver_light_init()
     /* Initialize the matrix driver (sole RMT owner). The stock led_driver is NOT used. */
     ws2812_matrix_handle_t handle = ws2812_matrix_init();
     if (handle) {
-        anim_engine_init(handle);
+        stream_engine_init(handle);
     }
     return (app_driver_handle_t)handle;
 }
