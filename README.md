@@ -121,7 +121,7 @@ docs/esp-matter-patches/    required SDK patch
 ## Prereqs and config
 
 esp-idf `v6.0.2`, esp-matter `release-v1.6` (with long-octet-string patch,
-  `docs/esp-matter-patches/README.md`), Python 3.12+ with `uv`
+  `docs/esp-matter-patches/README.md`), Python 3.14+ with `uv`
 
 | Kconfig | Default |
 |---|---|
