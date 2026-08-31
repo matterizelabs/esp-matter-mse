@@ -1,5 +1,7 @@
 # esp-matter-mse
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+
 Matter lets manufacturers add custom clusters, attributes, and commands on top of the standard
 device types through **Manufacturer Specific Extensions (MSE)**. This project is a working
 reference: it defines a custom cluster (`0x1618FC01`, Matterize vendor ID `0x1618`) that streams
@@ -137,3 +139,7 @@ python3 tools/generate_wire.py
 ```
 
 Pairing (dev material): setup code `2048-915-4736`, QR `MT:UFEA08-E150QJ850Y10`.
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE). Built by [Matterize Labs](https://matterizelabs.com).
