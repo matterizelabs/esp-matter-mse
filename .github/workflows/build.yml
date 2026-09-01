@@ -1,7 +1,13 @@
 name: build
 
 on:
+  workflow_call:
+    inputs:
+      release:
+        type: boolean
+        default: false
   push:
+    branches: ['**']
     paths:
       - 'main/**'
       - 'components/**'
@@ -40,3 +46,10 @@ jobs:
           . "$IDF_PATH/export.sh"
           . "$ESP_MATTER_PATH/export.sh"
           idf.py build
+
+      - name: Publish release
+        if: ${{ inputs.release == true }}
+        uses: softprops/action-gh-release@v3
+        with:
+          files: build/matter_mse.bin
+          generate_release_notes: true

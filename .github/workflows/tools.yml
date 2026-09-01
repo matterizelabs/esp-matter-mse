@@ -1,7 +1,9 @@
 name: tools
 
 on:
+  workflow_call:
   push:
+    branches: ['**']
     paths:
       - 'tools/**'
       - 'shared/**'
