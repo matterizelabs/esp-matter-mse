@@ -188,13 +188,19 @@ extern "C" void app_main()
 
     /* Create a Matter node and add the mandatory Root Node device type on endpoint 0 */
     node::config_t node_config;
-    node_config.root_node.basic_information.software_version = PROJECT_VER_NUMBER;
-    strncpy(node_config.root_node.basic_information.software_version_string, PROJECT_VER,
-            sizeof(node_config.root_node.basic_information.software_version_string) - 1);
 
     /* node handle can be used to add/modify other endpoints. */
     node_t *node = node::create(&node_config, app_attribute_update_cb, app_identification_cb);
     ABORT_APP_ON_FAILURE(node != nullptr, ESP_LOGE(TAG, "Failed to create Matter node"));
+
+    /* Inject the software version derived from the semver string (single source). */
+    esp_matter_attr_val_t sw_ver = esp_matter_uint32(PROJECT_VER_NUMBER);
+    attribute::update(0, BasicInformation::Id, BasicInformation::Attributes::SoftwareVersion::Id, &sw_ver);
+
+    char software_version_str[64] = {0};
+    strncpy(software_version_str, PROJECT_VER, sizeof(software_version_str) - 1);
+    esp_matter_attr_val_t sw_ver_str = esp_matter_char_str(software_version_str, strlen(software_version_str));
+    attribute::update(0, BasicInformation::Id, BasicInformation::Attributes::SoftwareVersionString::Id, &sw_ver_str);
 
     MEMORY_PROFILER_DUMP_HEAP_STAT("node created");
 
