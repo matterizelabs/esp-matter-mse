@@ -164,11 +164,14 @@ static void fail_transfer(void) {
 }
 
 static void stop_playback(void) {
+    bool was_running = s_running;
     s_running = false;
     s_cache_slot = -1;
     s_cache_idx = 0;
     ring_reset();   /* drop frames still queued so nothing repaints after the clear */
-    ws2812_matrix_clear(s_matrix);
+    if (was_running) {
+        ws2812_matrix_clear(s_matrix);
+    }
     uint8_t zero[32] = {0};
     set_active(zero);
 }

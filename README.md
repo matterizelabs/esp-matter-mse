@@ -41,12 +41,20 @@ ct pairing code 1 MT:UFEA08-E150QJ850Y10   # or: ct pairing onnetwork 1 89674523
 
 ```bash
 cd tools
-uv run python effects.py chase --leds 2 --seconds 0.1 --color ff8800 --prefix ct > /tmp/chase.sh
+
+# diagnostic: light one LED at a time to verify the physical chain order
+uv run python chase.py --leds 2 --seconds 0.1 --color ff8800 > /tmp/chase.sh
 sh /tmp/chase.sh
+
+# any built-in effect (see "Effects" below)
+uv run python effects.py chase --speed 30 --color ff8800 > /tmp/anim.sh
+sh /tmp/anim.sh
+
 ct any read-by-id 0x1618FC01 0x0008 1 1   # 4 = playing
 ```
 
-`effects.py` emits `hash -> meta -> chunks -> play` writes. Sample:
+`chase.py` and `effects.py` print a `hash -> meta -> chunks -> play` sequence of
+chip-tool `write-by-id` commands on stdout:
 
 ```text
 ct any write-by-id 0x1618FC01 0x0005 hex:9521b8e4...2429b 1 1    # announce (sha256)
@@ -74,16 +82,42 @@ ct any write-by-id 0x1618FC01 0x0009 hex:03 1 1                 # CLEAR_CACHE
 
 ## Effects
 
+Two tools render animation frames and print a chip-tool `write-by-id` sequence
+(`hash -> meta -> chunks -> play`) to stdout. Pipe to a shell, or save and run later:
+
 ```bash
 cd tools
-uv run python effects.py <effect> [options]
+uv run python effects.py <effect> [options] | sh   # built-in effects
+uv run python chase.py [options] | sh              # LED-chain diagnostic
 ```
+
+- `effects.py` — nine procedural effects: `solid`, `chase`, `comet`, `pulse`,
+  `rainbow`, `sparkle`, `wipe`, `strobe`, `fire`.
+- `chase.py` — lights one LED at a time to verify the physical chain order.
+
+### Prefix and node id
+
+The emitted commands call chip-tool via `./chip-tool` by default. Point
+`--prefix` at your chip-tool if it lives elsewhere, and `--node-id` at the
+commissioned node (default `1`):
+
+```bash
+uv run python effects.py solid --color ff8800 --prefix ~/chip-tool/chip-tool | sh
+uv run python chase.py --prefix ct --node-id 1 | sh
+```
+
+`--prefix ct` emits `ct ...` commands. Note `alias ct=./chip-tool` is a shell
+alias, so it works for interactive one-liners like `ct onoff on 1 1` but NOT
+inside `sh /tmp/script.sh`. For scripts use `./chip-tool`, a full path, or a
+real `ct` symlink/wrapper on `PATH`.
+
+### effects.py
 
 | Effect | Example |
 |---|---|
 | `solid` | `effects.py solid --color ff8800 --seconds 2` |
-| `chase` | `effects.py chase --color ff0000 --speed 15 --tail 4` |
-| `comet` | `effects.py comet --color 00aaff --speed 10 --tail 8` |
+| `chase` | `effects.py chase --color ff0000 --speed 30 --tail 4` |
+| `comet` | `effects.py comet --color 00aaff --speed 15 --tail 8` |
 | `pulse` | `effects.py pulse --color ff8800 --period 2` |
 | `rainbow` | `effects.py rainbow --seconds 6` |
 | `sparkle` | `effects.py sparkle --color ffffff --density 0.3` |
@@ -91,7 +125,19 @@ uv run python effects.py <effect> [options]
 | `strobe` | `effects.py strobe --color ffffff --rate 4` |
 | `fire` | `effects.py fire --seed 3` |
 
-Options: `--color RRGGBB`, `--seconds`, `--fps 30`, `--node-id 1`, `--prefix ct`.
+Common options: `--color RRGGBB` (`#` optional), `--seconds`, `--fps 30`,
+`--node-id 1`, `--prefix ./chip-tool`, plus per-effect options (`--speed`,
+`--size`, `--tail`, `--direction`, `--period`, `--density`, `--rate`, `--seed`).
+
+### chase.py
+
+```bash
+uv run python chase.py --leds 30 --seconds 0.1 --color ff8800 | sh
+```
+
+`--leds` = LEDs to light in sequence (default 30, capped at `width*height`);
+`--seconds` = hold time per LED. Use it to confirm the serpentine chain order
+in `shared/wire_contract.json` matches the physical wiring.
 
 ## Cluster (0x1618FC01)
 
