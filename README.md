@@ -8,6 +8,12 @@ reference: it defines a custom cluster (`0x1618FC01`, Matterize vendor ID `0x161
 raw byte payloads to an ESP32, verifies them with SHA-256, caches them in flash across 5 LRU
 slots, and replays them on demand. The demo sink is a 48-LED (8x6) WS2812 matrix light.
 
+## Demo
+
+The `fire` effect (`effects.py fire`) streaming to the 48-LED matrix:
+
+<video src="media/esp-matter-mse-demo.mp4" controls muted loop width="640"></video>
+
 All commands below use `ct` as the chip-tool alias: `alias ct=./chip-tool`.
 
 ## Quick start
