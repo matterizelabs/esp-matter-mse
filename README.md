@@ -86,6 +86,28 @@ ct any write-by-id 0x1618FC01 0x0009 hex:02 1 1                 # STOP
 ct any write-by-id 0x1618FC01 0x0009 hex:03 1 1                 # CLEAR_CACHE
 ```
 
+## Version
+
+The firmware version has a single source: a semver string. The numeric Matter
+`SoftwareVersion` is derived from it, so the two cannot drift.
+
+| Attribute | Value |
+|---|---|
+| `SoftwareVersionString` | semver, e.g. `1.2.3` |
+| `SoftwareVersion` | `major*65536 + minor*256 + patch` (`0xMMmmpp`) |
+
+Default is `1.0` (`0x010000`). Override locally:
+
+```bash
+idf.py -DCLI_PROJECT_VER="1.2.3" build
+```
+
+`-D` is sticky: it is cached in `build/CMakeCache.txt`, so later plain
+`idf.py build` reuses it. Run `idf.py fullclean` to reset.
+
+Release: push a semantic tag `vX.Y.Z`. CI builds the firmware and publishes a
+GitHub release with the `.bin`, injecting that tag as the version.
+
 ## Effects
 
 Two tools render animation frames and print a chip-tool `write-by-id` sequence
