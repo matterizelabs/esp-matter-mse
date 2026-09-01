@@ -17,3 +17,4 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       release: true
+      version: ${{ github.ref_name }}

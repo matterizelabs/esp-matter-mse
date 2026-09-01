@@ -15,11 +15,18 @@ else()
     set(PROJECT_VER "${CLI_PROJECT_VER}")
 endif()
 
-if(NOT DEFINED CLI_PROJECT_VER_NUMBER)
-    set(PROJECT_VER_NUMBER 1)
+# Derive the numeric Matter SoftwareVersion (major*65536 + minor*256 + patch)
+# from the semver string so the string and number cannot drift.
+string(REPLACE "." ";" _PROJECT_VER_PARTS "${PROJECT_VER}")
+list(GET _PROJECT_VER_PARTS 0 _PROJECT_VER_MAJOR)
+list(GET _PROJECT_VER_PARTS 1 _PROJECT_VER_MINOR)
+list(LENGTH _PROJECT_VER_PARTS _PROJECT_VER_PART_COUNT)
+if(_PROJECT_VER_PART_COUNT GREATER 2)
+    list(GET _PROJECT_VER_PARTS 2 _PROJECT_VER_PATCH)
 else()
-    set(PROJECT_VER_NUMBER "${CLI_PROJECT_VER_NUMBER}")
+    set(_PROJECT_VER_PATCH 0)
 endif()
+math(EXPR PROJECT_VER_NUMBER "${_PROJECT_VER_MAJOR} * 65536 + ${_PROJECT_VER_MINOR} * 256 + ${_PROJECT_VER_PATCH}")
 
 set(ESP_MATTER_PATH $ENV{ESP_MATTER_PATH})
 set(MATTER_SDK_PATH ${ESP_MATTER_PATH}/connectedhomeip/connectedhomeip)
@@ -52,3 +59,4 @@ idf_build_set_property(C_COMPILE_OPTIONS "-Os" APPEND)
 # For RISCV chips, project_include.cmake sets -Wno-format, but does not clear various
 # flags that depend on -Wformat
 idf_build_set_property(COMPILE_OPTIONS "-Wno-format-nonliteral;-Wno-format-security" APPEND)
+idf_build_set_property(COMPILE_DEFINITIONS "PROJECT_VER=\"${PROJECT_VER}\";PROJECT_VER_NUMBER=${PROJECT_VER_NUMBER}" APPEND)

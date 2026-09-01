@@ -6,6 +6,9 @@ on:
       release:
         type: boolean
         default: false
+      version:
+        type: string
+        default: ''
   push:
     branches: ['**']
     paths:
@@ -42,10 +45,16 @@ jobs:
           git apply "$GITHUB_WORKSPACE/docs/esp-matter-patches/0001-fix-long-octet-string-ember-size.patch"
 
       - name: Build firmware
+        env:
+          CLI_PROJECT_VER: ${{ inputs.version }}
         run: |
           . "$IDF_PATH/export.sh"
           . "$ESP_MATTER_PATH/export.sh"
-          idf.py build
+          build_args=()
+          if [ -n "$CLI_PROJECT_VER" ]; then
+            build_args=(-DCLI_PROJECT_VER="${CLI_PROJECT_VER#v}")
+          fi
+          idf.py "${build_args[@]}" build
 
       - name: Publish release
         if: ${{ inputs.release == true }}

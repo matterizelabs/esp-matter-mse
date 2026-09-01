@@ -10,6 +10,7 @@
 #include <esp_log.h>
 #include <esp_mac.h>
 #include <nvs_flash.h>
+#include <string.h>
 
 #include <esp_matter.h>
 #include <esp_matter_console.h>
@@ -187,6 +188,9 @@ extern "C" void app_main()
 
     /* Create a Matter node and add the mandatory Root Node device type on endpoint 0 */
     node::config_t node_config;
+    node_config.root_node.basic_information.software_version = PROJECT_VER_NUMBER;
+    strncpy(node_config.root_node.basic_information.software_version_string, PROJECT_VER,
+            sizeof(node_config.root_node.basic_information.software_version_string) - 1);
 
     /* node handle can be used to add/modify other endpoints. */
     node_t *node = node::create(&node_config, app_attribute_update_cb, app_identification_cb);
