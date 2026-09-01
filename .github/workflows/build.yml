@@ -2,11 +2,30 @@ name: build
 
 on:
   push:
+    paths:
+      - 'main/**'
+      - 'components/**'
+      - 'CMakeLists.txt'
+      - 'sdkconfig*'
+      - 'partitions.csv'
+      - 'shared/**'
+      - 'docs/esp-matter-patches/**'
+      - '.github/workflows/build.yml'
   pull_request:
+    paths:
+      - 'main/**'
+      - 'components/**'
+      - 'CMakeLists.txt'
+      - 'sdkconfig*'
+      - 'partitions.csv'
+      - 'shared/**'
+      - 'docs/esp-matter-patches/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
 
 jobs:
   firmware:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     container: espressif/esp-matter:release-v1.6_idf_v6.0.2
     steps:
       - uses: actions/checkout@v4

@@ -1,0 +1,30 @@
+name: tools
+
+on:
+  push:
+    paths:
+      - 'tools/**'
+      - 'shared/**'
+      - '.github/workflows/tools.yml'
+  pull_request:
+    paths:
+      - 'tools/**'
+      - 'shared/**'
+      - '.github/workflows/tools.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install deps
+        working-directory: tools
+        run: uv sync
+
+      - name: Run tests
+        working-directory: tools
+        run: uv run pytest
