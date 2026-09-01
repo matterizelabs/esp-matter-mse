@@ -50,11 +50,11 @@ jobs:
         run: |
           . "$IDF_PATH/export.sh"
           . "$ESP_MATTER_PATH/export.sh"
-          build_args=()
           if [ -n "$CLI_PROJECT_VER" ]; then
-            build_args=(-DCLI_PROJECT_VER="${CLI_PROJECT_VER#v}")
+            idf.py -DCLI_PROJECT_VER="${CLI_PROJECT_VER#v}" build
+          else
+            idf.py build
           fi
-          idf.py "${build_args[@]}" build
 
       - name: Publish release
         if: ${{ inputs.release == true }}
