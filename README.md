@@ -12,7 +12,7 @@ slots, and replays them on demand. The demo sink is a 48-LED (8x6) WS2812 matrix
 
 The `fire` effect (`effects.py fire`) streaming to the 48-LED matrix:
 
-<video src="media/esp-matter-mse-demo.mp4" controls muted loop width="640"></video>
+https://github.com/user-attachments/assets/2eec36fc-0880-459b-8c0d-9bfa555e519f
 
 All commands below use `ct` as the chip-tool alias: `alias ct=./chip-tool`.
 
