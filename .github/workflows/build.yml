@@ -1,0 +1,23 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    container: espressif/esp-matter:release-v1.6_idf_v6.0.2
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply esp-matter patch
+        run: |
+          cd "$ESP_MATTER_PATH"
+          git apply "$GITHUB_WORKSPACE/docs/esp-matter-patches/0001-fix-long-octet-string-ember-size.patch"
+
+      - name: Build firmware
+        run: |
+          . "$IDF_PATH/export.sh"
+          . "$ESP_MATTER_PATH/export.sh"
+          idf.py build
