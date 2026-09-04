@@ -1,17 +1,18 @@
 #pragma once
+#include "stream_protocol.h"
+#include "ws2812_matrix.h"
 #include <esp_err.h>
 #include <esp_matter.h>
-#include <stdint.h>
-#include <stddef.h>
 #include <stdbool.h>
-#include "ws2812_matrix.h"
-#include "stream_protocol.h"
+#include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-bool stream_parse_chunk_header(const uint8_t *buf, size_t len, stream_chunk_hdr_t *out);
+bool stream_parse_chunk_header(const uint8_t *buf, size_t len,
+                               stream_chunk_hdr_t *out);
 
 #ifdef __cplusplus
 }
@@ -22,14 +23,18 @@ bool stream_parse_chunk_header(const uint8_t *buf, size_t len, stream_chunk_hdr_
 #define STREAM_MAX_FRAMES 900
 
 esp_err_t stream_flash_init(void);
-int  stream_flash_find(const uint8_t hash[32]);
-int  stream_flash_alloc_slot(void);
-esp_err_t stream_flash_write(int slot, uint32_t offset, const uint8_t *data, size_t len);
-esp_err_t stream_flash_commit(int slot, const uint8_t hash[32], uint16_t total_frames, uint8_t fps, uint8_t loop);
+int stream_flash_find(const uint8_t hash[32]);
+int stream_flash_alloc_slot(void);
+esp_err_t stream_flash_write(int slot, uint32_t offset, const uint8_t *data,
+                             size_t len);
+esp_err_t stream_flash_commit(int slot, const uint8_t hash[32],
+                              uint16_t total_frames, uint8_t fps, uint8_t loop);
 esp_err_t stream_flash_abort(int slot);
 esp_err_t stream_flash_clear_all(void);
-esp_err_t stream_flash_read_frame(int slot, uint32_t frame_index, uint8_t *out, size_t out_len);
-esp_err_t stream_flash_get_slot_info(int slot, uint16_t *total_frames, uint8_t *fps, uint8_t *loop);
+esp_err_t stream_flash_read_frame(int slot, uint32_t frame_index, uint8_t *out,
+                                  size_t out_len);
+esp_err_t stream_flash_get_slot_info(int slot, uint16_t *total_frames,
+                                     uint8_t *fps, uint8_t *loop);
 esp_err_t stream_flash_get_slot_hash(int slot, uint8_t *out, size_t len);
 
 esp_err_t stream_engine_init(ws2812_matrix_handle_t m);
@@ -59,5 +64,5 @@ constexpr uint32_t ATTR_STATUS = STREAM_ATTR_STATUS;
 constexpr uint32_t ATTR_PLAY_CMD = STREAM_ATTR_PLAY_CMD;
 constexpr uint32_t ATTR_ACTIVE = STREAM_ATTR_ACTIVE;
 esp_matter::cluster_t *cluster_create(esp_matter::endpoint_t *ep);
-}
+} // namespace stream
 #endif

@@ -1,11 +1,20 @@
 from matter_stream import effects
 
-
 FRAME_BYTES = 8 * 6 * 3
 
 
 def test_registry_has_catalog():
-    for name in ("solid", "chase", "comet", "pulse", "rainbow", "sparkle", "wipe", "strobe", "fire"):
+    for name in (
+        "solid",
+        "chase",
+        "comet",
+        "pulse",
+        "rainbow",
+        "sparkle",
+        "wipe",
+        "strobe",
+        "fire",
+    ):
         assert name in effects.EFFECTS
 
 
@@ -26,7 +35,7 @@ def test_chase_lights_one_pixel():
     frames = effects.chase(color="#ffffff", speed=48.0, seconds=1.0, fps=48, size=1)
     assert len(frames) == 48
     for f in frames:
-        lit = sum(1 for i in range(0, len(f), 3) if f[i:i + 3] != b"\x00\x00\x00")
+        lit = sum(1 for i in range(0, len(f), 3) if f[i : i + 3] != b"\x00\x00\x00")
         assert lit == 1
 
 

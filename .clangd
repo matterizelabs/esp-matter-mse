@@ -1,0 +1,31 @@
+CompileFlags:
+  CompilationDatabase: build
+  Add:
+    - --target=xtensa-esp32-unknown-elf
+    - -nostdinc
+    - -D__XTENSA__=1
+    - -D__XTENSA_EL__=1
+    - -isystem
+    - /home/amac/.espressif/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/picolibc/include
+    - -isystem
+    - /home/amac/.espressif/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/picolibc/xtensa-esp-elf/include/c++/15.2.0/xtensa-esp-elf/esp32/no-rtti
+    - -isystem
+    - /home/amac/.espressif/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/xtensa-esp-elf/include/c++/15.2.0
+    - -isystem
+    - /home/amac/.espressif/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/xtensa-esp-elf/include/c++/15.2.0/xtensa-esp-elf/esp32/no-rtti
+    - -isystem
+    - /home/amac/.espressif/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/xtensa-esp-elf/include/c++/15.2.0/backward
+    - -isystem
+    - /home/amac/.espressif/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/lib/gcc/xtensa-esp-elf/15.2.0/include
+    - -isystem
+    - /home/amac/.espressif/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/lib/gcc/xtensa-esp-elf/15.2.0/include-fixed
+    - -isystem
+    - /home/amac/.espressif/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/xtensa-esp-elf/include
+  Remove:
+    - -fno-shrink-wrap
+    - -fstrict-volatile-bitfields
+    - -fno-tree-switch-conversion
+    - -mlongcalls
+    - -fmacro-prefix-map=*
+    - -fzero-init-padding-bits=all
+    - -fno-malloc-dce

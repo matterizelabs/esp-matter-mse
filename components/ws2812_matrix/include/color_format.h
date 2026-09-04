@@ -19,19 +19,19 @@ extern "C" {
 #endif
 
 typedef struct {
-    uint16_t hue;
-    uint8_t saturation;
+  uint16_t hue;
+  uint8_t saturation;
 } HS_color_t;
 
 typedef struct {
-    uint8_t red;
-    uint8_t green;
-    uint8_t blue;
+  uint8_t red;
+  uint8_t green;
+  uint8_t blue;
 } RGB_color_t;
 
 typedef struct {
-    uint16_t x;
-    uint16_t y;
+  uint16_t x;
+  uint16_t y;
 } XY_color_t;
 
 void temp_to_hs(uint32_t temperature, HS_color_t *HS);

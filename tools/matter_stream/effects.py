@@ -27,7 +27,7 @@ def _idx_map(width, height, serpentine=True):
 
 def _hex_rgb(value):
     value = value.lstrip("#")
-    return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4))
+    return tuple(int(value[i : i + 2], 16) for i in (0, 2, 4))
 
 
 def _hsv(hue, sat=1.0, val=1.0):
@@ -36,13 +36,13 @@ def _hsv(hue, sat=1.0, val=1.0):
 
 
 def _put(buf, idx, rgb):
-    buf[idx * 3:idx * 3 + 3] = bytes(rgb)
+    buf[idx * 3 : idx * 3 + 3] = bytes(rgb)
     return buf
 
 
 def _fill(buf, rgb):
     for i in range(0, len(buf), 3):
-        buf[i:i + 3] = bytes(rgb)
+        buf[i : i + 3] = bytes(rgb)
     return buf
 
 
@@ -56,8 +56,17 @@ def solid(color="#ffffff", seconds=1.0, width=8, height=6, fps=30, **kw):
     return [frame] * _seconds(fps, seconds)
 
 
-def chase(color="#ffffff", speed=30.0, size=1, tail=0, seconds=None,
-          width=8, height=6, fps=30, **kw):
+def chase(
+    color="#ffffff",
+    speed=30.0,
+    size=1,
+    tail=0,
+    seconds=None,
+    width=8,
+    height=6,
+    fps=30,
+    **kw,
+):
     count = width * height
     if seconds is None:
         seconds = count / speed
@@ -78,8 +87,9 @@ def chase(color="#ffffff", speed=30.0, size=1, tail=0, seconds=None,
     return frames
 
 
-def comet(color="#ffffff", speed=15.0, tail=8, seconds=None,
-          width=8, height=6, fps=30, **kw):
+def comet(
+    color="#ffffff", speed=15.0, tail=8, seconds=None, width=8, height=6, fps=30, **kw
+):
     count = width * height
     if seconds is None:
         seconds = count / speed
@@ -123,8 +133,9 @@ def rainbow(seconds=6.0, spatial=False, width=8, height=6, fps=30, **kw):
     return frames
 
 
-def sparkle(color="#ffffff", density=0.25, seconds=6.0, seed=0,
-            width=8, height=6, fps=30, **kw):
+def sparkle(
+    color="#ffffff", density=0.25, seconds=6.0, seed=0, width=8, height=6, fps=30, **kw
+):
     rng = random.Random(seed)
     count = width * height
     rgb = _hex_rgb(color)
@@ -154,7 +165,7 @@ def wipe(color="#ffffff", direction="ltr", step=1, width=8, height=6, fps=30, **
     filled = 0
     while filled < count:
         buf = _blank(width, height)
-        for x, y in seq[:filled + step]:
+        for x, y in seq[: filled + step]:
             _put(buf, imap[(x, y)], rgb)
         frames.append(bytes(buf))
         filled += step

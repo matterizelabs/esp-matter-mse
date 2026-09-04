@@ -11,26 +11,54 @@ def main(argv=None):
     )
     p.add_argument("effect", choices=sorted(effects.EFFECTS))
     p.add_argument("--color", default="#ffffff")
-    p.add_argument("--seconds", type=float, default=None, help="effect duration (chase/comet derive it from speed when omitted)")
-    p.add_argument("--speed", type=float, default=None, help="chain positions per second (chase/comet)")
+    p.add_argument(
+        "--seconds",
+        type=float,
+        default=None,
+        help="effect duration (chase/comet derive it from speed when omitted)",
+    )
+    p.add_argument(
+        "--speed",
+        type=float,
+        default=None,
+        help="chain positions per second (chase/comet)",
+    )
     p.add_argument("--size", type=int, default=1, help="chase block size")
-    p.add_argument("--tail", type=int, default=None, help="fading trail length (chase/comet)")
+    p.add_argument(
+        "--tail", type=int, default=None, help="fading trail length (chase/comet)"
+    )
     p.add_argument("--period", type=float, default=2.0, help="pulse period in seconds")
-    p.add_argument("--density", type=float, default=0.25, help="sparkle probability per pixel per frame")
+    p.add_argument(
+        "--density",
+        type=float,
+        default=0.25,
+        help="sparkle probability per pixel per frame",
+    )
     p.add_argument("--direction", default="ltr", choices=("ltr", "rtl", "ttb", "btt"))
     p.add_argument("--step", type=int, default=1, help="wipe pixels per frame")
     p.add_argument("--rate", type=float, default=4.0, help="strobe flashes per second")
-    p.add_argument("--spatial", action="store_true", help="rainbow as a spatial gradient instead of temporal")
+    p.add_argument(
+        "--spatial",
+        action="store_true",
+        help="rainbow as a spatial gradient instead of temporal",
+    )
     p.add_argument("--seed", type=int, default=0, help="random seed (sparkle/fire)")
     p.add_argument("--node-id", type=int, default=1)
     p.add_argument("--width", type=int, default=8)
     p.add_argument("--height", type=int, default=6)
     p.add_argument("--fps", type=int, default=30)
-    p.add_argument("--no-serpentine", dest="serpentine", action="store_false", default=True)
+    p.add_argument(
+        "--no-serpentine", dest="serpentine", action="store_false", default=True
+    )
     p.add_argument("--prefix", default="./chip-tool")
     args = p.parse_args(argv)
 
-    kw = dict(width=args.width, height=args.height, fps=args.fps, color=args.color)
+    kw = {
+        "width": args.width,
+        "height": args.height,
+        "fps": args.fps,
+        "color": args.color,
+    }
     name = args.effect
     if name in ("chase", "comet"):
         kw["speed"] = args.speed or (15.0 if name == "comet" else 30.0)
@@ -63,7 +91,10 @@ def main(argv=None):
 
     slot_bytes = len(frames) * args.width * args.height * 3
     if slot_bytes > 128 * 1024:
-        print(f"error: {len(frames)} frames = {slot_bytes} bytes exceeds 128 KiB cache slot", file=sys.stderr)
+        print(
+            f"error: {len(frames)} frames = {slot_bytes} bytes exceeds 128 KiB cache slot",
+            file=sys.stderr,
+        )
         return 2
 
     h = codec.stream_hash(frames)
@@ -72,7 +103,10 @@ def main(argv=None):
 
     for c in cli.build_commands(args.node_id, h, meta, chunks):
         print(c.replace("./chip-tool", args.prefix))
-    print(f"# effect={name} frames={len(frames)} chunks={len(chunks)} hash={h.hex()}", file=sys.stderr)
+    print(
+        f"# effect={name} frames={len(frames)} chunks={len(chunks)} hash={h.hex()}",
+        file=sys.stderr,
+    )
     return 0
 
 
