@@ -44,47 +44,13 @@ set(EXTRA_COMPONENT_DIRS
 
 project(matter_mse)
 
-# Regenerate .clangd at configure time from the active toolchain, so it never
-# hardcodes a home dir or toolchain version.
-# ponytail: assumes the stable crosstool-ng picolibc layout; if headers stop
-# resolving, derive these from `gcc -specs=build/specs/picolibc.specs -fno-rtti
-# -E -x c++ -v` instead.
-get_filename_component(_toolchain ${CMAKE_CXX_COMPILER} DIRECTORY)
-get_filename_component(_toolchain ${_toolchain} DIRECTORY)
-set(_gcc_ver ${CMAKE_CXX_COMPILER_VERSION})
-file(WRITE ${CMAKE_SOURCE_DIR}/.clangd
-"CompileFlags:
-  CompilationDatabase: build
-  Add:
-    - --target=xtensa-${IDF_TARGET}-unknown-elf
-    - -nostdinc
-    - -D__XTENSA__=1
-    - -D__XTENSA_EL__=1
-    - -isystem
-    - ${_toolchain}/picolibc/include
-    - -isystem
-    - ${_toolchain}/picolibc/xtensa-esp-elf/include/c++/${_gcc_ver}/xtensa-esp-elf/${IDF_TARGET}/no-rtti
-    - -isystem
-    - ${_toolchain}/xtensa-esp-elf/include/c++/${_gcc_ver}
-    - -isystem
-    - ${_toolchain}/xtensa-esp-elf/include/c++/${_gcc_ver}/xtensa-esp-elf/${IDF_TARGET}/no-rtti
-    - -isystem
-    - ${_toolchain}/xtensa-esp-elf/include/c++/${_gcc_ver}/backward
-    - -isystem
-    - ${_toolchain}/lib/gcc/xtensa-esp-elf/${_gcc_ver}/include
-    - -isystem
-    - ${_toolchain}/lib/gcc/xtensa-esp-elf/${_gcc_ver}/include-fixed
-    - -isystem
-    - ${_toolchain}/xtensa-esp-elf/include
-  Remove:
-    - -fno-shrink-wrap
-    - -fstrict-volatile-bitfields
-    - -fno-tree-switch-conversion
-    - -mlongcalls
-    - -fmacro-prefix-map=*
-    - -fzero-init-padding-bits=all
-    - -fno-malloc-dce
-")
+# Regenerate .clangd from the active toolchain after each build, so it never
+# hardcodes a home dir, toolchain version, or libc (newlib vs picolibc).
+add_custom_target(clangd ALL
+    COMMAND ${PYTHON} "${CMAKE_SOURCE_DIR}/tools/gen_clangd.py" "${CMAKE_SOURCE_DIR}"
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    COMMENT "Generating .clangd from the active toolchain"
+    VERBATIM)
 
 # WARNING: This is just an example for using key for decrypting the encrypted OTA image
 # Please do not use it as is.
